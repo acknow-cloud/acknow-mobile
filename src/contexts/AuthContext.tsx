@@ -1,6 +1,10 @@
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { cognitoService, UserData } from '../services/cognito.service';
-
+interface SignUpResult {
+    isSignUpComplete: boolean;
+    userId?: string;
+    codeDeliveryDetails?: any;  // Add this line
+}
 interface SignUpParams {
     username: string;
     password: string;
@@ -24,10 +28,6 @@ interface ResendSignUpCodeParams {
     username: string;
 }
 
-interface SignUpResult {
-    isSignUpComplete: boolean;
-    userId?: string;
-}
 
 interface AuthContextType {
     user: UserData | null;
@@ -108,8 +108,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 params.options?.userAttributes || {}
             );
 
-            console.log('✅ SignUp result:', result);
-            return result;
+            console.log('✅ SignUp result from service:', JSON.stringify(result, null, 2));
+
+            // Return the full result including codeDeliveryDetails
+            return {
+                isSignUpComplete: result.isSignUpComplete,
+                userId: result.userId,
+                codeDeliveryDetails: result.codeDeliveryDetails,
+            };
         } catch (error) {
             console.error('❌ AuthContext signUp error:', error);
             throw error;

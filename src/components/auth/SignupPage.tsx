@@ -85,7 +85,7 @@ export const SignupPage = () => {
 
         // Phone validation
         const phoneRegex = /^\+?[1-9]\d{1,14}$/;
-        let phone = formData.phone_number.trim().replace(/[\s\-()]/g, ''); // Remove spaces, dashes, parentheses
+        let phone = formData.phone_number.trim().replace(/[\s\-()]/g, '');
 
         if (!phone.startsWith('+')) {
             phone = '+' + phone;
@@ -134,11 +134,10 @@ export const SignupPage = () => {
             const userAttributes: Record<string, string> = {
                 email: formData.email.trim().toLowerCase(),
                 name: formData.name.trim(),
-                phone_number: phone, // Use validated phone
+                phone_number: phone,
                 'custom:tenant_id': tenantId,
             };
 
-            // Only add family_name if provided
             if (formData.family_name && formData.family_name.trim()) {
                 userAttributes.family_name = formData.family_name.trim();
             }
@@ -156,27 +155,31 @@ export const SignupPage = () => {
                 },
             });
 
-            console.log('✅ Signup result:', result);
-            console.log('isSignUpComplete:', result.isSignUpComplete);
+            console.log('✅ Full Signup result:', JSON.stringify(result, null, 2));
+            console.log('📊 isSignUpComplete:', result.isSignUpComplete);
+            console.log('📊 userId:', result.userId);
 
+            // IMPORTANT: Check if confirmation is needed
+            // If isSignUpComplete is false, user needs to confirm email
             if (!result.isSignUpComplete) {
-                console.log('🔄 Moving to confirmation mode');
-                console.log('📍 Current mode before:', mode);
+                console.log('🔄 Email confirmation required - Moving to confirmation mode');
                 setMode('confirm');
-                console.log('📍 setMode("confirm") called');
-                // Don't navigate - stay on this screen
                 return;
             } else {
-                console.log('✅ Signup complete, no confirmation needed');
-                // Auto-login if no confirmation needed
+                console.log('⚠️ WARNING: isSignUpComplete is TRUE!');
+                console.log('⚠️ This means either:');
+                console.log('   1. Auto-confirmation is enabled in Cognito');
+                console.log('   2. Email verification is not required');
+                console.log('   3. User was already confirmed');
+                console.log('🔄 Navigating to login...');
                 navigation.navigate('Login' as never);
             }
         } catch (err: any) {
-            console.error('Sign up error:', err);
+            console.error('❌ Sign up error:', err);
+            console.error('Error details:', JSON.stringify(err, null, 2));
             setError(err.message || 'Failed to sign up');
         }
     };
-
     const handleConfirmSignUp = async () => {
         setError('');
 

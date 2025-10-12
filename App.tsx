@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { LoginPage } from './src/components/auth/LoginPage';
 import { SignupPage } from './src/components/auth/SignupPage';
 import DashboardScreen from './src/pages/DashboardPage';
+
 import { ActivityIndicator, View } from 'react-native';
 
 console.log('✅ Polyfills loaded');

@@ -129,12 +129,13 @@ export const cognitoService = {
         }
     },
 
-    // NEW: SignUp with full user attributes support
+    // Replace the signUpV6 function in your cognito.service.ts
+
     signUpV6: async (
         username: string,
         password: string,
         userAttributes: Record<string, string>
-    ): Promise<{ isSignUpComplete: boolean; userId?: string }> => {
+    ): Promise<{ isSignUpComplete: boolean; userId?: string; codeDeliveryDetails?: any }> => {
         console.log('🟣 Direct API signUpV6 called');
         console.log('Username:', username);
         console.log('User attributes:', userAttributes);
@@ -169,7 +170,7 @@ export const cognitoService = {
             const data = await response.json();
 
             console.log('📥 Response status:', response.status);
-            console.log('📥 Response data:', JSON.stringify(data, null, 2));
+            console.log('📥 Full Response data:', JSON.stringify(data, null, 2));
 
             if (!response.ok) {
                 console.error('❌ SignUp error:', data);
@@ -178,18 +179,31 @@ export const cognitoService = {
             }
 
             console.log('✅ Sign up successful');
-            console.log('User confirmed:', data.UserConfirmed);
-            console.log('User sub:', data.UserSub);
-            console.log('Code delivery details:', data.CodeDeliveryDetails);
+            console.log('📊 UserConfirmed:', data.UserConfirmed);
+            console.log('📊 UserSub:', data.UserSub);
+            console.log('📊 CodeDeliveryDetails:', JSON.stringify(data.CodeDeliveryDetails, null, 2));
 
             // Cognito returns UserConfirmed: false when email verification is required
+            // Also check if CodeDeliveryDetails exists (indicates code was sent)
+            const hasCodeDelivery = !!data.CodeDeliveryDetails;
             const isSignUpComplete = data.UserConfirmed === true;
 
+            console.log('🔍 Has code delivery:', hasCodeDelivery);
             console.log('🔍 isSignUpComplete:', isSignUpComplete);
+
+            if (isSignUpComplete && !hasCodeDelivery) {
+                console.log('⚠️ WARNING: User is auto-confirmed without verification!');
+                console.log('⚠️ Check your Cognito User Pool settings:');
+                console.log('   - Go to AWS Cognito Console');
+                console.log('   - Select your User Pool');
+                console.log('   - Check "Sign-up experience" > "Attribute verification"');
+                console.log('   - Ensure email verification is required');
+            }
 
             return {
                 isSignUpComplete: isSignUpComplete,
                 userId: data.UserSub,
+                codeDeliveryDetails: data.CodeDeliveryDetails,
             };
         } catch (error: any) {
             console.error('❌ SignUp error:', error);
