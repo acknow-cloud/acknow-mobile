@@ -42,7 +42,7 @@ export const LoginPage = () => {
 
             <TextInput
                 style={styles.input}
-                placeholder="Username or Email"
+                placeholder="Email address"
                 placeholderTextColor="#9DB8A6"
                 value={username}
                 onChangeText={setUsername}

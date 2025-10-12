@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -9,9 +9,11 @@ import {
     ActivityIndicator,
     Modal,
     Dimensions,
+    Alert,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useAlerts } from '../hooks/useAlerts';
+import { alertsService, AlertExplanation } from '../services/alerts.service';
 
 const { width } = Dimensions.get('window');
 
@@ -20,6 +22,110 @@ const DashboardScreen = () => {
     const { alerts, loading, error, refreshing, counts, refresh } = useAlerts(tenantId);
     const [selectedAlert, setSelectedAlert] = useState<any>(null);
     const [timeRange, setTimeRange] = useState('7d');
+
+    // AI Explanation state
+    const [aiExplanation, setAiExplanation] = useState<AlertExplanation | null>(null);
+    const [loadingExplanation, setLoadingExplanation] = useState(false);
+    const [explanationError, setExplanationError] = useState<string | null>(null);
+
+    // Action states
+    const [acknowledging, setAcknowledging] = useState(false);
+    const [acknowledgingId, setAcknowledgingId] = useState<string | null>(null);
+    const [resolving, setResolving] = useState(false);
+
+    // Fetch AI explanation when alert is selected
+    useEffect(() => {
+        if (selectedAlert?.alert_id) {
+            fetchAIExplanation(selectedAlert.alert_id);
+        } else {
+            // Reset when modal closes
+            setAiExplanation(null);
+            setExplanationError(null);
+        }
+    }, [selectedAlert?.alert_id]);
+
+    const fetchAIExplanation = async (alertId: string) => {
+        setLoadingExplanation(true);
+        setExplanationError(null);
+
+        const result = await alertsService.getAlertExplanation(alertId);
+
+        if (result.success && result.data) {
+            setAiExplanation(result.data);
+        } else {
+            setExplanationError(result.error || 'Failed to load explanation');
+        }
+
+        setLoadingExplanation(false);
+    };
+
+    const handleAcknowledge = async () => {
+        if (!selectedAlert?.alert_id || acknowledging) return;
+
+        setAcknowledging(true);
+
+        const success = await alertsService.acknowledgeAlert(selectedAlert.alert_id);
+
+        if (success) {
+            Alert.alert('Success', 'Alert acknowledged successfully');
+            // Update local state
+            setSelectedAlert({ ...selectedAlert, acknowledged: true });
+            // Refresh alerts list
+            refresh();
+        } else {
+            Alert.alert('Error', 'Failed to acknowledge alert');
+        }
+
+        setAcknowledging(false);
+    };
+
+    const handleQuickAcknowledge = async (alertId: string) => {
+        if (acknowledgingId) return;
+
+        setAcknowledgingId(alertId);
+
+        const success = await alertsService.acknowledgeAlert(alertId);
+
+        if (success) {
+            // Refresh alerts list to show updated status
+            refresh();
+        } else {
+            Alert.alert('Error', 'Failed to acknowledge alert');
+        }
+
+        setAcknowledgingId(null);
+    };
+
+    const handleResolve = async () => {
+        if (!selectedAlert?.alert_id || resolving) return;
+
+        Alert.alert(
+            'Resolve Alert',
+            'Are you sure you want to resolve this alert?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Resolve',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setResolving(true);
+
+                        const success = await alertsService.resolveAlert(selectedAlert.alert_id);
+
+                        if (success) {
+                            Alert.alert('Success', 'Alert resolved successfully');
+                            setSelectedAlert(null);
+                            refresh();
+                        } else {
+                            Alert.alert('Error', 'Failed to resolve alert');
+                        }
+
+                        setResolving(false);
+                    },
+                },
+            ]
+        );
+    };
 
     if (!tenantId) {
         return (
@@ -306,16 +412,19 @@ const DashboardScreen = () => {
                                 <Text style={[styles.tableHeaderText, { flex: 1 }]}>Severity</Text>
                                 <Text style={[styles.tableHeaderText, { flex: 2 }]}>Service</Text>
                                 <Text style={[styles.tableHeaderText, { flex: 1 }]}>Time</Text>
+                                <Text style={[styles.tableHeaderText, { flex: 0.8 }]}>Action</Text>
                             </View>
 
                             {/* Table Rows */}
                             {alerts
                                 .filter((alert) => alert.status !== 'resolved')
-                                .slice(0, 10)
                                 .map((alert) => (
                                     <TouchableOpacity
                                         key={alert.alert_id}
-                                        style={styles.tableRow}
+                                        style={[
+                                            styles.tableRow,
+                                            alert.acknowledged && styles.tableRowAcknowledged,
+                                        ]}
                                         onPress={() => setSelectedAlert(alert)}
                                     >
                                         <View style={[styles.tableCell, { flex: 1 }]}>
@@ -351,6 +460,29 @@ const DashboardScreen = () => {
                                         <View style={[styles.tableCell, { flex: 1 }]}>
                                             <Text style={styles.timeAgo}>{formatTime(alert.received_at)} ago</Text>
                                             <Text style={styles.timeDate}>{formatDate(alert.received_at)}</Text>
+                                        </View>
+
+                                        <View style={[styles.tableCell, { flex: 0.8, alignItems: 'center' }]}>
+                                            {alert.acknowledged ? (
+                                                <View style={styles.acknowledgedBadge}>
+                                                    <Text style={styles.acknowledgedIcon}>✓</Text>
+                                                </View>
+                                            ) : (
+                                                <TouchableOpacity
+                                                    style={[
+                                                        styles.quickAckButton,
+                                                        acknowledgingId === alert.alert_id && styles.quickAckButtonLoading,
+                                                    ]}
+                                                    onPress={() => handleQuickAcknowledge(alert.alert_id)}
+                                                    disabled={acknowledgingId === alert.alert_id}
+                                                >
+                                                    {acknowledgingId === alert.alert_id ? (
+                                                        <ActivityIndicator size="small" color="#f59e0b" />
+                                                    ) : (
+                                                        <Text style={styles.quickAckIcon}>✓</Text>
+                                                    )}
+                                                </TouchableOpacity>
+                                            )}
                                         </View>
                                     </TouchableOpacity>
                                 ))}
@@ -410,12 +542,38 @@ const DashboardScreen = () => {
                                         <Text style={styles.aiIcon}>🤖</Text>
                                         <Text style={styles.aiTitle}>AI Explanation</Text>
                                     </View>
-                                    <Text style={styles.aiText}>
-                                        This alert indicates elevated response times in the{' '}
-                                        {selectedAlert.service}. The pattern suggests a sudden spike in
-                                        concurrent requests that may have exceeded configured limits. Immediate
-                                        investigation recommended for critical severity.
-                                    </Text>
+
+                                    {loadingExplanation ? (
+                                        <View style={styles.explanationLoading}>
+                                            <ActivityIndicator size="small" color="#3b82f6" />
+                                            <Text style={styles.explanationLoadingText}>
+                                                Generating explanation...
+                                            </Text>
+                                        </View>
+                                    ) : explanationError ? (
+                                        <View style={styles.explanationError}>
+                                            <Text style={styles.explanationErrorText}>
+                                                ⚠️ {explanationError}
+                                            </Text>
+                                            <TouchableOpacity
+                                                onPress={() => fetchAIExplanation(selectedAlert.alert_id)}
+                                                style={styles.retryExplanationButton}
+                                            >
+                                                <Text style={styles.retryExplanationText}>Retry</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    ) : aiExplanation?.explanation ? (
+                                        <>
+                                            <Text style={styles.aiText}>{aiExplanation.explanation}</Text>
+                                            {aiExplanation.created_at && (
+                                                <Text style={styles.explanationTime}>
+                                                    Generated {formatDate(aiExplanation.created_at)}
+                                                </Text>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <Text style={styles.aiText}>No explanation available</Text>
+                                    )}
                                 </View>
 
                                 {/* Action Buttons */}
@@ -425,13 +583,35 @@ const DashboardScreen = () => {
                                     </TouchableOpacity>
 
                                     {!selectedAlert.acknowledged && (
-                                        <TouchableOpacity style={styles.acknowledgeButton}>
-                                            <Text style={styles.actionButtonText}>Acknowledge</Text>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.acknowledgeButton,
+                                                acknowledging && styles.buttonDisabled,
+                                            ]}
+                                            onPress={handleAcknowledge}
+                                            disabled={acknowledging}
+                                        >
+                                            {acknowledging ? (
+                                                <ActivityIndicator size="small" color="#FFFFFF" />
+                                            ) : (
+                                                <Text style={styles.actionButtonText}>✓ Acknowledge</Text>
+                                            )}
                                         </TouchableOpacity>
                                     )}
 
-                                    <TouchableOpacity style={styles.resolveButton}>
-                                        <Text style={styles.actionButtonText}>Resolve</Text>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.resolveButton,
+                                            resolving && styles.buttonDisabled,
+                                        ]}
+                                        onPress={handleResolve}
+                                        disabled={resolving}
+                                    >
+                                        {resolving ? (
+                                            <ActivityIndicator size="small" color="#FFFFFF" />
+                                        ) : (
+                                            <Text style={styles.actionButtonText}>✓ Resolve</Text>
+                                        )}
                                     </TouchableOpacity>
                                 </View>
                             </ScrollView>
@@ -733,6 +913,10 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#3c5344',
     },
+    tableRowAcknowledged: {
+        opacity: 0.6,
+        borderColor: '#f59e0b40',
+    },
     tableCell: {
         justifyContent: 'center',
     },
@@ -769,6 +953,39 @@ const styles = StyleSheet.create({
     timeDate: {
         fontSize: 9,
         color: '#6b7280',
+    },
+    quickAckButton: {
+        backgroundColor: '#f59e0b20',
+        borderWidth: 1,
+        borderColor: '#f59e0b40',
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    quickAckButtonLoading: {
+        opacity: 0.5,
+    },
+    quickAckIcon: {
+        fontSize: 14,
+        color: '#f59e0b',
+        fontWeight: 'bold',
+    },
+    acknowledgedBadge: {
+        backgroundColor: '#14b84b20',
+        borderWidth: 1,
+        borderColor: '#14b84b40',
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    acknowledgedIcon: {
+        fontSize: 14,
+        color: '#14b84b',
+        fontWeight: 'bold',
     },
     loadingContainer: {
         alignItems: 'center',
@@ -901,6 +1118,41 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         lineHeight: 20,
     },
+    explanationLoading: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    explanationLoadingText: {
+        fontSize: 14,
+        color: '#9db8a6',
+    },
+    explanationError: {
+        alignItems: 'center',
+    },
+    explanationErrorText: {
+        fontSize: 13,
+        color: '#ef4444',
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    retryExplanationButton: {
+        backgroundColor: '#3b82f6',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 6,
+    },
+    retryExplanationText: {
+        fontSize: 12,
+        color: '#FFFFFF',
+        fontWeight: '600',
+    },
+    explanationTime: {
+        fontSize: 11,
+        color: '#9db8a6',
+        marginTop: 12,
+        fontStyle: 'italic',
+    },
     modalActions: {
         gap: 12,
     },
@@ -921,6 +1173,9 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
         borderRadius: 12,
         alignItems: 'center',
+    },
+    buttonDisabled: {
+        opacity: 0.5,
     },
     actionButtonText: {
         fontSize: 16,
