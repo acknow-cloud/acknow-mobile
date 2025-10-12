@@ -1,14 +1,43 @@
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { cognitoService, UserData } from '../services/cognito.service';
 
+interface SignUpParams {
+    username: string;
+    password: string;
+    options?: {
+        userAttributes?: {
+            email?: string;
+            name?: string;
+            family_name?: string;
+            phone_number?: string;
+            'custom:tenant_id'?: string;
+        };
+    };
+}
+
+interface ConfirmSignUpParams {
+    username: string;
+    confirmationCode: string;
+}
+
+interface ResendSignUpCodeParams {
+    username: string;
+}
+
+interface SignUpResult {
+    isSignUpComplete: boolean;
+    userId?: string;
+}
+
 interface AuthContextType {
     user: UserData | null;
     tenantId: string | null;
     isLoading: boolean;
     isAuthenticated: boolean;
     signIn: (username: string, password: string) => Promise<void>;
-    signUp: (username: string, password: string, email: string) => Promise<void>;
-    confirmSignUp: (username: string, code: string) => Promise<void>;
+    signUp: (params: SignUpParams) => Promise<SignUpResult>;
+    confirmSignUp: (params: ConfirmSignUpParams) => Promise<void>;
+    resendSignUpCode: (params: ResendSignUpCodeParams) => Promise<void>;
     signOut: () => Promise<void>;
     forgotPassword: (username: string) => Promise<void>;
     confirmPassword: (username: string, code: string, newPassword: string) => Promise<void>;
@@ -63,21 +92,54 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     };
 
-    const signUp = async (username: string, password: string, email: string) => {
+    const signUp = async (params: SignUpParams): Promise<SignUpResult> => {
         setIsLoading(true);
         try {
-            await cognitoService.signUp(username, password, email);
+            console.log('🟢 AuthContext.signUp called with params:', {
+                username: params.username,
+                hasPassword: !!params.password,
+                attributes: params.options?.userAttributes,
+            });
+
+            // Call the cognito service with the new format
+            const result = await cognitoService.signUpV6(
+                params.username,
+                params.password,
+                params.options?.userAttributes || {}
+            );
+
+            console.log('✅ SignUp result:', result);
+            return result;
+        } catch (error) {
+            console.error('❌ AuthContext signUp error:', error);
+            throw error;
         } finally {
             setIsLoading(false);
         }
     };
 
-    const confirmSignUp = async (username: string, code: string) => {
+    const confirmSignUp = async (params: ConfirmSignUpParams) => {
         setIsLoading(true);
         try {
-            await cognitoService.confirmSignUp(username, code);
+            console.log('🟢 AuthContext.confirmSignUp called');
+            await cognitoService.confirmSignUpV6(params.username, params.confirmationCode);
+            console.log('✅ Confirmation successful');
+        } catch (error) {
+            console.error('❌ AuthContext confirmSignUp error:', error);
+            throw error;
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const resendSignUpCode = async (params: ResendSignUpCodeParams) => {
+        try {
+            console.log('🟢 AuthContext.resendSignUpCode called');
+            await cognitoService.resendSignUpCode(params.username);
+            console.log('✅ Code resent successfully');
+        } catch (error) {
+            console.error('❌ AuthContext resendSignUpCode error:', error);
+            throw error;
         }
     };
 
@@ -111,6 +173,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 signIn,
                 signUp,
                 confirmSignUp,
+                resendSignUpCode,
                 signOut,
                 forgotPassword,
                 confirmPassword,

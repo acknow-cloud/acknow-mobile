@@ -61,13 +61,13 @@ export const cognitoService = {
             const payload = JSON.parse(Buffer.from(base64Payload, 'base64').toString());
 
             console.log('✅ Token decoded');
-            console.log('📋 Tenant ID from token:', payload['custom:tenant_id']); // Debug log
+            console.log('📋 Tenant ID from token:', payload['custom:tenant_id']);
 
             const userData: UserData = {
                 username: payload['cognito:username'],
                 email: payload.email,
                 sub: payload.sub,
-                tenantId: payload['custom:tenant_id'], // ✅ Fixed: underscore instead of camelCase
+                tenantId: payload['custom:tenant_id'],
                 name: payload.name,
                 attributes: payload,
             };
@@ -95,7 +95,7 @@ export const cognitoService = {
     },
 
     signUp: async (username: string, password: string, email: string): Promise<any> => {
-        console.log('🟣 Direct API signUp called');
+        console.log('🟣 Direct API signUp called (old method)');
 
         try {
             const response = await fetch(COGNITO_ENDPOINT, {
@@ -129,8 +129,76 @@ export const cognitoService = {
         }
     },
 
+    // NEW: SignUp with full user attributes support
+    signUpV6: async (
+        username: string,
+        password: string,
+        userAttributes: Record<string, string>
+    ): Promise<{ isSignUpComplete: boolean; userId?: string }> => {
+        console.log('🟣 Direct API signUpV6 called');
+        console.log('Username:', username);
+        console.log('User attributes:', userAttributes);
+
+        try {
+            // Convert user attributes object to Cognito format
+            const UserAttributes = Object.entries(userAttributes).map(([key, value]) => ({
+                Name: key,
+                Value: value,
+            }));
+
+            console.log('📤 Sending to Cognito:', JSON.stringify({
+                ClientId: COGNITO_CONFIG.clientId,
+                Username: username,
+                UserAttributes: UserAttributes,
+            }, null, 2));
+
+            const response = await fetch(COGNITO_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-amz-json-1.1',
+                    'X-Amz-Target': 'AWSCognitoIdentityProviderService.SignUp',
+                },
+                body: JSON.stringify({
+                    ClientId: COGNITO_CONFIG.clientId,
+                    Username: username,
+                    Password: password,
+                    UserAttributes: UserAttributes,
+                }),
+            });
+
+            const data = await response.json();
+
+            console.log('📥 Response status:', response.status);
+            console.log('📥 Response data:', JSON.stringify(data, null, 2));
+
+            if (!response.ok) {
+                console.error('❌ SignUp error:', data);
+                const errorMessage = data.message || data.__type || 'Sign up failed';
+                throw new Error(errorMessage);
+            }
+
+            console.log('✅ Sign up successful');
+            console.log('User confirmed:', data.UserConfirmed);
+            console.log('User sub:', data.UserSub);
+            console.log('Code delivery details:', data.CodeDeliveryDetails);
+
+            // Cognito returns UserConfirmed: false when email verification is required
+            const isSignUpComplete = data.UserConfirmed === true;
+
+            console.log('🔍 isSignUpComplete:', isSignUpComplete);
+
+            return {
+                isSignUpComplete: isSignUpComplete,
+                userId: data.UserSub,
+            };
+        } catch (error: any) {
+            console.error('❌ SignUp error:', error);
+            throw error;
+        }
+    },
+
     confirmSignUp: async (username: string, code: string): Promise<any> => {
-        console.log('🟣 Direct API confirmSignUp called');
+        console.log('🟣 Direct API confirmSignUp called (old method)');
 
         try {
             const response = await fetch(COGNITO_ENDPOINT, {
@@ -159,6 +227,79 @@ export const cognitoService = {
         }
     },
 
+    // NEW: ConfirmSignUp method
+    confirmSignUpV6: async (username: string, confirmationCode: string): Promise<void> => {
+        console.log('🟣 Direct API confirmSignUpV6 called');
+        console.log('Username:', username);
+        console.log('Code length:', confirmationCode.length);
+
+        try {
+            const response = await fetch(COGNITO_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-amz-json-1.1',
+                    'X-Amz-Target': 'AWSCognitoIdentityProviderService.ConfirmSignUp',
+                },
+                body: JSON.stringify({
+                    ClientId: COGNITO_CONFIG.clientId,
+                    Username: username,
+                    ConfirmationCode: confirmationCode,
+                }),
+            });
+
+            const data = await response.json();
+
+            console.log('📥 Response status:', response.status);
+
+            if (!response.ok) {
+                console.error('❌ Confirmation error:', data);
+                const errorMessage = data.message || data.__type || 'Confirmation failed';
+                throw new Error(errorMessage);
+            }
+
+            console.log('✅ Confirmation successful');
+        } catch (error: any) {
+            console.error('❌ Confirmation error:', error);
+            throw error;
+        }
+    },
+
+    // NEW: Resend signup code
+    resendSignUpCode: async (username: string): Promise<void> => {
+        console.log('🟣 Direct API resendSignUpCode called');
+        console.log('Username:', username);
+
+        try {
+            const response = await fetch(COGNITO_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-amz-json-1.1',
+                    'X-Amz-Target': 'AWSCognitoIdentityProviderService.ResendConfirmationCode',
+                },
+                body: JSON.stringify({
+                    ClientId: COGNITO_CONFIG.clientId,
+                    Username: username,
+                }),
+            });
+
+            const data = await response.json();
+
+            console.log('📥 Response status:', response.status);
+
+            if (!response.ok) {
+                console.error('❌ Resend code error:', data);
+                const errorMessage = data.message || data.__type || 'Failed to resend code';
+                throw new Error(errorMessage);
+            }
+
+            console.log('✅ Code resent successfully');
+            console.log('Destination:', data.CodeDeliveryDetails?.Destination);
+        } catch (error: any) {
+            console.error('❌ Resend code error:', error);
+            throw error;
+        }
+    },
+
     getCurrentUser: async (): Promise<UserData | null> => {
         try {
             const idToken = await AsyncStorage.getItem('idToken');
@@ -179,7 +320,7 @@ export const cognitoService = {
                 username: payload['cognito:username'],
                 email: payload.email,
                 sub: payload.sub,
-                tenantId: payload['custom:tenant_id'], // ✅ Fixed: underscore
+                tenantId: payload['custom:tenant_id'],
                 name: payload.name,
                 attributes: payload,
             };
@@ -206,5 +347,65 @@ export const cognitoService = {
 
     getTenantId: async (): Promise<string | null> => {
         return await AsyncStorage.getItem('tenantId');
+    },
+
+    forgotPassword: async (username: string): Promise<void> => {
+        console.log('🟣 Direct API forgotPassword called');
+
+        try {
+            const response = await fetch(COGNITO_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-amz-json-1.1',
+                    'X-Amz-Target': 'AWSCognitoIdentityProviderService.ForgotPassword',
+                },
+                body: JSON.stringify({
+                    ClientId: COGNITO_CONFIG.clientId,
+                    Username: username,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Failed to initiate password reset');
+            }
+
+            console.log('✅ Password reset email sent');
+        } catch (error: any) {
+            console.error('❌ Forgot password error:', error);
+            throw error;
+        }
+    },
+
+    confirmPassword: async (username: string, code: string, newPassword: string): Promise<void> => {
+        console.log('🟣 Direct API confirmPassword called');
+
+        try {
+            const response = await fetch(COGNITO_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-amz-json-1.1',
+                    'X-Amz-Target': 'AWSCognitoIdentityProviderService.ConfirmForgotPassword',
+                },
+                body: JSON.stringify({
+                    ClientId: COGNITO_CONFIG.clientId,
+                    Username: username,
+                    ConfirmationCode: code,
+                    Password: newPassword,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Failed to reset password');
+            }
+
+            console.log('✅ Password reset successful');
+        } catch (error: any) {
+            console.error('❌ Confirm password error:', error);
+            throw error;
+        }
     },
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     View,
     Text,
@@ -10,10 +10,12 @@ import {
     Modal,
     Dimensions,
     Alert,
+    StatusBar,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useAlerts } from '../hooks/useAlerts';
 import { alertsService, AlertExplanation } from '../services/alerts.service';
+import { Ionicons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
@@ -21,7 +23,7 @@ const DashboardScreen = () => {
     const { user, tenantId, signOut } = useAuth();
     const { alerts, loading, error, refreshing, counts, refresh } = useAlerts(tenantId);
     const [selectedAlert, setSelectedAlert] = useState<any>(null);
-    const [timeRange, setTimeRange] = useState('7d');
+    const [activeTab, setActiveTab] = useState('dashboard');
 
     // AI Explanation state
     const [aiExplanation, setAiExplanation] = useState<AlertExplanation | null>(null);
@@ -33,12 +35,54 @@ const DashboardScreen = () => {
     const [acknowledgingId, setAcknowledgingId] = useState<string | null>(null);
     const [resolving, setResolving] = useState(false);
 
-    // Fetch AI explanation when alert is selected
+    // Sort alerts by time (newest first)
+    const sortedAlerts = useMemo(() => {
+        return [...alerts].sort((a, b) =>
+            new Date(b.received_at).getTime() - new Date(a.received_at).getTime()
+        );
+    }, [alerts]);
+
+    // Generate chart data
+    const chartData = useMemo(() => {
+        const now = new Date();
+        const days = 7;
+        const data = [];
+
+        for (let i = days - 1; i >= 0; i--) {
+            const date = new Date(now);
+            date.setDate(date.getDate() - i);
+            date.setHours(0, 0, 0, 0);
+
+            const nextDate = new Date(date);
+            nextDate.setDate(nextDate.getDate() + 1);
+
+            const dayAlerts = alerts.filter(alert => {
+                const alertDate = new Date(alert.received_at);
+                return alertDate >= date && alertDate < nextDate;
+            });
+
+            const critical = dayAlerts.filter(a => a.severity === 'critical').length;
+            const warning = dayAlerts.filter(a => a.severity === 'warning').length;
+            const info = dayAlerts.filter(a => a.severity === 'info').length;
+
+            data.push({
+                day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()],
+                critical,
+                warning,
+                info,
+                total: critical + warning + info,
+            });
+        }
+
+        return data;
+    }, [alerts]);
+
+    const maxChartValue = Math.max(...chartData.map(d => d.total), 1);
+
     useEffect(() => {
         if (selectedAlert?.alert_id) {
             fetchAIExplanation(selectedAlert.alert_id);
         } else {
-            // Reset when modal closes
             setAiExplanation(null);
             setExplanationError(null);
         }
@@ -68,9 +112,7 @@ const DashboardScreen = () => {
 
         if (success) {
             Alert.alert('Success', 'Alert acknowledged successfully');
-            // Update local state
             setSelectedAlert({ ...selectedAlert, acknowledged: true });
-            // Refresh alerts list
             refresh();
         } else {
             Alert.alert('Error', 'Failed to acknowledge alert');
@@ -87,7 +129,6 @@ const DashboardScreen = () => {
         const success = await alertsService.acknowledgeAlert(alertId);
 
         if (success) {
-            // Refresh alerts list to show updated status
             refresh();
         } else {
             Alert.alert('Error', 'Failed to acknowledge alert');
@@ -130,8 +171,9 @@ const DashboardScreen = () => {
     if (!tenantId) {
         return (
             <View style={styles.container}>
+                <StatusBar barStyle="light-content" />
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#14b84b" />
+                    <ActivityIndicator size="large" color="#10b981" />
                     <Text style={styles.loadingText}>Loading...</Text>
                 </View>
             </View>
@@ -144,15 +186,6 @@ const DashboardScreen = () => {
             case 'warning': return '#f59e0b';
             case 'info': return '#3b82f6';
             default: return '#6b7280';
-        }
-    };
-
-    const getSeverityIcon = (severity: string) => {
-        switch (severity) {
-            case 'critical': return '⚠️';
-            case 'warning': return '⚡';
-            case 'info': return 'ℹ️';
-            default: return '•';
         }
     };
 
@@ -179,319 +212,468 @@ const DashboardScreen = () => {
 
     return (
         <View style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <View>
-                    <Text style={styles.headerTitle}>Dashboard</Text>
-                    <Text style={styles.headerSubtitle}>Real-time monitoring</Text>
+            <StatusBar barStyle="light-content" />
+
+            {/* Render different content based on active tab */}
+            {activeTab === 'dashboard' ? (
+                <ScrollView
+                    style={styles.scrollView}
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={refresh}
+                            tintColor="#10b981"
+                            colors={['#10b981']}
+                        />
+                    }
+                >
+                    {/* Stats Grid */}
+                    <View style={styles.statsContainer}>
+                        <Text style={styles.pageTitle}>Dashboard</Text>
+                        <Text style={styles.sectionTitle}>Overview</Text>
+                        <View style={styles.statsGrid}>
+                            {/* Critical */}
+                            <View style={styles.statCard}>
+                                <View style={styles.statCardHeader}>
+                                    <View style={[styles.statIconBadge, { backgroundColor: '#ef444415' }]}>
+                                        <Text style={[styles.statIconText, { color: '#ef4444' }]}>!</Text>
+                                    </View>
+                                    <View style={styles.statTrend}>
+                                        <Text style={[styles.statTrendIcon, { color: '#ef4444' }]}>↑</Text>
+                                        <Text style={[styles.statTrendText, { color: '#ef4444' }]}>12%</Text>
+                                    </View>
+                                </View>
+                                <Text style={styles.statValue}>{counts.critical}</Text>
+                                <Text style={styles.statLabel}>Critical</Text>
+                            </View>
+
+                            {/* Warnings */}
+                            <View style={styles.statCard}>
+                                <View style={styles.statCardHeader}>
+                                    <View style={[styles.statIconBadge, { backgroundColor: '#f59e0b15' }]}>
+                                        <Text style={[styles.statIconText, { color: '#f59e0b' }]}>!</Text>
+                                    </View>
+                                    <View style={styles.statTrend}>
+                                        <Text style={[styles.statTrendIcon, { color: '#10b981' }]}>↓</Text>
+                                        <Text style={[styles.statTrendText, { color: '#10b981' }]}>5%</Text>
+                                    </View>
+                                </View>
+                                <Text style={styles.statValue}>{counts.warning}</Text>
+                                <Text style={styles.statLabel}>Warnings</Text>
+                            </View>
+
+                            {/* Info */}
+                            <View style={styles.statCard}>
+                                <View style={styles.statCardHeader}>
+                                    <View style={[styles.statIconBadge, { backgroundColor: '#3b82f615' }]}>
+                                        <Text style={[styles.statIconText, { color: '#3b82f6' }]}>i</Text>
+                                    </View>
+                                    <View style={styles.statTrend}>
+                                        <Text style={[styles.statTrendIcon, { color: '#10b981' }]}>↓</Text>
+                                        <Text style={[styles.statTrendText, { color: '#10b981' }]}>8%</Text>
+                                    </View>
+                                </View>
+                                <Text style={styles.statValue}>{counts.info}</Text>
+                                <Text style={styles.statLabel}>Info</Text>
+                            </View>
+
+                            {/* Total */}
+                            <View style={styles.statCard}>
+                                <View style={styles.statCardHeader}>
+                                    <View style={[styles.statIconBadge, { backgroundColor: '#10b98115' }]}>
+                                        <Text style={[styles.statIconText, { color: '#10b981' }]}>∑</Text>
+                                    </View>
+                                    <View style={styles.statTrend}>
+                                        <Text style={[styles.statTrendIcon, { color: '#10b981' }]}>→</Text>
+                                        <Text style={[styles.statTrendText, { color: '#6b7f72' }]}>--</Text>
+                                    </View>
+                                </View>
+                                <Text style={styles.statValue}>{alerts.length}</Text>
+                                <Text style={styles.statLabel}>Total</Text>
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* Alert Trend Chart */}
+                    <View style={styles.chartSection}>
+                        <Text style={styles.sectionTitle}>7-Day Trend</Text>
+                        <View style={styles.chartCard}>
+                            <View style={styles.chartContainer}>
+                                <View style={styles.chartBars}>
+                                    {chartData.map((item, idx) => {
+                                        const percentage = maxChartValue > 0 ? (item.total / maxChartValue) * 100 : 0;
+                                        // Cap at 95% to prevent overflow
+                                        const cappedPercentage = Math.min(percentage, 95);
+
+                                        return (
+                                            <View key={idx} style={styles.barColumn}>
+                                                <View style={styles.barStack}>
+                                                    {item.critical > 0 && (
+                                                        <View
+                                                            style={[
+                                                                styles.barSegment,
+                                                                {
+                                                                    height: `${(item.critical / item.total) * cappedPercentage}%`,
+                                                                    backgroundColor: '#ef4444',
+                                                                },
+                                                            ]}
+                                                        />
+                                                    )}
+                                                    {item.warning > 0 && (
+                                                        <View
+                                                            style={[
+                                                                styles.barSegment,
+                                                                {
+                                                                    height: `${(item.warning / item.total) * cappedPercentage}%`,
+                                                                    backgroundColor: '#f59e0b',
+                                                                },
+                                                            ]}
+                                                        />
+                                                    )}
+                                                    {item.info > 0 && (
+                                                        <View
+                                                            style={[
+                                                                styles.barSegment,
+                                                                {
+                                                                    height: `${(item.info / item.total) * cappedPercentage}%`,
+                                                                    backgroundColor: '#3b82f6',
+                                                                },
+                                                            ]}
+                                                        />
+                                                    )}
+                                                </View>
+                                                <Text style={styles.barLabel}>{item.day}</Text>
+                                                {item.total > 0 && (
+                                                    <Text style={styles.barCount}>{item.total}</Text>
+                                                )}
+                                            </View>
+                                        );
+                                    })}
+                                </View>
+                                <View style={styles.chartLegend}>
+                                    <View style={styles.legendItem}>
+                                        <View style={[styles.legendDot, { backgroundColor: '#ef4444' }]} />
+                                        <Text style={styles.legendText}>Critical</Text>
+                                    </View>
+                                    <View style={styles.legendItem}>
+                                        <View style={[styles.legendDot, { backgroundColor: '#f59e0b' }]} />
+                                        <Text style={styles.legendText}>Warning</Text>
+                                    </View>
+                                    <View style={styles.legendItem}>
+                                        <View style={[styles.legendDot, { backgroundColor: '#3b82f6' }]} />
+                                        <Text style={styles.legendText}>Info</Text>
+                                    </View>
+                                </View>
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* Active Alerts */}
+                    <View style={styles.alertsSection}>
+                        <View style={styles.alertsHeader}>
+                            <Text style={styles.sectionTitle}>Active Alerts</Text>
+                            <View style={styles.alertCountBadge}>
+                                <Text style={styles.alertCountText}>
+                                    {sortedAlerts.filter(a => a.status !== 'resolved').length}
+                                </Text>
+                            </View>
+                        </View>
+
+                        {loading && !refreshing ? (
+                            <View style={styles.centerContainer}>
+                                <ActivityIndicator size="large" color="#10b981" />
+                                <Text style={styles.loadingText}>Loading alerts...</Text>
+                            </View>
+                        ) : error ? (
+                            <View style={styles.centerContainer}>
+                                <Text style={styles.errorIcon}>⚠</Text>
+                                <Text style={styles.errorText}>{error}</Text>
+                                <TouchableOpacity onPress={refresh} style={styles.retryButton}>
+                                    <Text style={styles.retryButtonText}>Retry</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ) : sortedAlerts.filter(a => a.status !== 'resolved').length === 0 ? (
+                            <View style={styles.centerContainer}>
+                                <Text style={styles.emptyIcon}>✓</Text>
+                                <Text style={styles.emptyTitle}>All Clear</Text>
+                                <Text style={styles.emptyText}>No active alerts at the moment</Text>
+                            </View>
+                        ) : (
+                            <View style={styles.alertsList}>
+                                {sortedAlerts
+                                    .filter((alert) => alert.status !== 'resolved')
+                                    .slice(0, 20)
+                                    .map((alert) => (
+                                        <TouchableOpacity
+                                            key={alert.alert_id}
+                                            style={[
+                                                styles.alertCard,
+                                                !alert.acknowledged && styles.alertCardActive,
+                                            ]}
+                                            onPress={() => setSelectedAlert(alert)}
+                                            activeOpacity={0.7}
+                                        >
+                                            {/* Severity Indicator */}
+                                            <View style={[
+                                                styles.alertIndicator,
+                                                { backgroundColor: getSeverityColor(alert.severity) }
+                                            ]} />
+
+                                            <View style={styles.alertContent}>
+                                                {/* Header */}
+                                                <View style={styles.alertHeader}>
+                                                    <View style={styles.alertHeaderLeft}>
+                                                        <View
+                                                            style={[
+                                                                styles.alertSeverityBadge,
+                                                                {
+                                                                    backgroundColor: `${getSeverityColor(alert.severity)}15`,
+                                                                    borderColor: getSeverityColor(alert.severity),
+                                                                },
+                                                            ]}
+                                                        >
+                                                            <Text
+                                                                style={[
+                                                                    styles.alertSeverityText,
+                                                                    { color: getSeverityColor(alert.severity) },
+                                                                ]}
+                                                            >
+                                                                {alert.severity.toUpperCase()}
+                                                            </Text>
+                                                        </View>
+                                                        <Text style={styles.alertService}>{alert.service}</Text>
+                                                    </View>
+                                                    <View style={styles.alertHeaderRight}>
+                                                        <Text style={styles.alertTime}>{formatTime(alert.received_at)}</Text>
+                                                        {!alert.acknowledged && (
+                                                            <View style={styles.newDot} />
+                                                        )}
+                                                    </View>
+                                                </View>
+
+                                                {/* Message */}
+                                                <Text style={styles.alertMessage} numberOfLines={2}>
+                                                    {alert.message}
+                                                </Text>
+
+                                                {/* Footer */}
+                                                <View style={styles.alertFooter}>
+                                                    <Text style={styles.alertDate}>
+                                                        {formatDate(alert.received_at)}
+                                                    </Text>
+
+                                                    {alert.acknowledged ? (
+                                                        <View style={styles.ackBadge}>
+                                                            <Text style={styles.ackBadgeIcon}>✓</Text>
+                                                            <Text style={styles.ackBadgeText}>Acknowledged</Text>
+                                                        </View>
+                                                    ) : (
+                                                        <TouchableOpacity
+                                                            style={styles.ackButton}
+                                                            onPress={() => handleQuickAcknowledge(alert.alert_id)}
+                                                            disabled={acknowledgingId === alert.alert_id}
+                                                        >
+                                                            {acknowledgingId === alert.alert_id ? (
+                                                                <ActivityIndicator size="small" color="#10b981" />
+                                                            ) : (
+                                                                <>
+                                                                    <Text style={styles.ackButtonIcon}>✓</Text>
+                                                                    <Text style={styles.ackButtonText}>Acknowledge</Text>
+                                                                </>
+                                                            )}
+                                                        </TouchableOpacity>
+                                                    )}
+                                                </View>
+                                            </View>
+                                        </TouchableOpacity>
+                                    ))}
+                            </View>
+                        )}
+                    </View>
+
+                    <View style={styles.bottomPadding} />
+                </ScrollView>
+            ) : activeTab === 'settings' ? (
+                <ScrollView
+                    style={styles.scrollView}
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                >
+                    {/* Settings Page */}
+                    <View style={styles.settingsContainer}>
+                        <Text style={styles.pageTitle}>Settings</Text>
+
+                        {/* Account Section */}
+                        <View style={styles.settingsSection}>
+                            <Text style={styles.settingsSectionTitle}>Account</Text>
+
+                            <View style={styles.settingsCard}>
+                                <View style={styles.accountInfo}>
+                                    <View style={styles.avatarCircle}>
+                                        <Ionicons name="person" size={32} color="#10b981" />
+                                    </View>
+                                    <View style={styles.accountDetails}>
+                                        <Text style={styles.accountName}>{user?.email || 'User'}</Text>
+                                    </View>
+                                </View>
+                            </View>
+                        </View>
+
+                        {/* Preferences Section */}
+                        <View style={styles.settingsSection}>
+                            <Text style={styles.settingsSectionTitle}>Preferences</Text>
+
+                            <View style={styles.settingsCard}>
+                                <TouchableOpacity style={styles.settingsItem}>
+                                    <View style={styles.settingsItemLeft}>
+                                        <Ionicons name="notifications-outline" size={22} color="#e5e7eb" />
+                                        <Text style={styles.settingsItemText}>Notifications</Text>
+                                    </View>
+                                    <Ionicons name="chevron-forward" size={20} color="#6b7f72" />
+                                </TouchableOpacity>
+
+                                <View style={styles.settingsDivider} />
+
+                                <TouchableOpacity style={styles.settingsItem}>
+                                    <View style={styles.settingsItemLeft}>
+                                        <Ionicons name="moon-outline" size={22} color="#e5e7eb" />
+                                        <Text style={styles.settingsItemText}>Dark Mode</Text>
+                                    </View>
+                                    <View style={styles.settingsToggle}>
+                                        <Text style={styles.settingsToggleText}>On</Text>
+                                    </View>
+                                </TouchableOpacity>
+
+                                <View style={styles.settingsDivider} />
+
+                                <TouchableOpacity style={styles.settingsItem}>
+                                    <View style={styles.settingsItemLeft}>
+                                        <Ionicons name="language-outline" size={22} color="#e5e7eb" />
+                                        <Text style={styles.settingsItemText}>Language</Text>
+                                    </View>
+                                    <View style={styles.settingsItemRight}>
+                                        <Text style={styles.settingsValueText}>English</Text>
+                                        <Ionicons name="chevron-forward" size={20} color="#6b7f72" />
+                                    </View>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        {/* About Section */}
+                        <View style={styles.settingsSection}>
+                            <Text style={styles.settingsSectionTitle}>About</Text>
+
+                            <View style={styles.settingsCard}>
+                                <TouchableOpacity style={styles.settingsItem}>
+                                    <View style={styles.settingsItemLeft}>
+                                        <Ionicons name="help-circle-outline" size={22} color="#e5e7eb" />
+                                        <Text style={styles.settingsItemText}>Help & Support</Text>
+                                    </View>
+                                    <Ionicons name="chevron-forward" size={20} color="#6b7f72" />
+                                </TouchableOpacity>
+
+                                <View style={styles.settingsDivider} />
+
+                                <TouchableOpacity style={styles.settingsItem}>
+                                    <View style={styles.settingsItemLeft}>
+                                        <Ionicons name="document-text-outline" size={22} color="#e5e7eb" />
+                                        <Text style={styles.settingsItemText}>Privacy Policy</Text>
+                                    </View>
+                                    <Ionicons name="chevron-forward" size={20} color="#6b7f72" />
+                                </TouchableOpacity>
+
+                                <View style={styles.settingsDivider} />
+
+                                <View style={styles.settingsItem}>
+                                    <View style={styles.settingsItemLeft}>
+                                        <Ionicons name="information-circle-outline" size={22} color="#e5e7eb" />
+                                        <Text style={styles.settingsItemText}>Version</Text>
+                                    </View>
+                                    <Text style={styles.settingsValueText}>1.0.0</Text>
+                                </View>
+                            </View>
+                        </View>
+
+                        {/* Sign Out Button */}
+                        <TouchableOpacity
+                            style={styles.signOutButtonLarge}
+                            onPress={signOut}
+                            activeOpacity={0.8}
+                        >
+                            <Ionicons name="log-out-outline" size={22} color="#FFFFFF" />
+                            <Text style={styles.signOutButtonText}>Sign Out</Text>
+                        </TouchableOpacity>
+
+                        <View style={styles.bottomPadding} />
+                    </View>
+                </ScrollView>
+            ) : (
+                <View style={styles.centerContainer}>
+                    <Ionicons name="construct-outline" size={64} color="#6b7f72" />
+                    <Text style={styles.emptyTitle}>Coming Soon</Text>
+                    <Text style={styles.emptyText}>This feature is under development</Text>
                 </View>
-                <TouchableOpacity onPress={signOut} style={styles.signOutButton}>
-                    <Text style={styles.signOutText}>Sign Out</Text>
+            )}
+
+            {/* Footer Navigation */}
+            <View style={styles.footer}>
+                <TouchableOpacity
+                    style={styles.footerTab}
+                    activeOpacity={0.7}
+                    onPress={() => setActiveTab('dashboard')}
+                >
+                    <View style={[styles.footerIconContainer, activeTab === 'dashboard' && styles.footerIconActive]}>
+                        <Ionicons name="grid" size={22} color={activeTab === 'dashboard' ? '#10b981' : '#6b7f72'} />
+                    </View>
+                    <Text style={[styles.footerLabel, activeTab === 'dashboard' && styles.footerLabelActive]}>Dashboard</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={styles.footerTab}
+                    activeOpacity={0.7}
+                    onPress={() => setActiveTab('incidents')}
+                >
+                    <View style={[styles.footerIconContainer, activeTab === 'incidents' && styles.footerIconActive]}>
+                        <Ionicons name="alert-circle" size={22} color={activeTab === 'incidents' ? '#10b981' : '#6b7f72'} />
+                    </View>
+                    <Text style={[styles.footerLabel, activeTab === 'incidents' && styles.footerLabelActive]}>Incidents</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={styles.footerTab}
+                    activeOpacity={0.7}
+                    onPress={() => setActiveTab('oncall')}
+                >
+                    <View style={[styles.footerIconContainer, activeTab === 'oncall' && styles.footerIconActive]}>
+                        <Ionicons name="people" size={22} color={activeTab === 'oncall' ? '#10b981' : '#6b7f72'} />
+                    </View>
+                    <Text style={[styles.footerLabel, activeTab === 'oncall' && styles.footerLabelActive]}>On-Call</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={styles.footerTab}
+                    activeOpacity={0.7}
+                    onPress={() => setActiveTab('reports')}
+                >
+                    <View style={[styles.footerIconContainer, activeTab === 'reports' && styles.footerIconActive]}>
+                        <Ionicons name="stats-chart" size={22} color={activeTab === 'reports' ? '#10b981' : '#6b7f72'} />
+                    </View>
+                    <Text style={[styles.footerLabel, activeTab === 'reports' && styles.footerLabelActive]}>Reports</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={styles.footerTab}
+                    activeOpacity={0.7}
+                    onPress={() => setActiveTab('settings')}
+                >
+                    <View style={[styles.footerIconContainer, activeTab === 'settings' && styles.footerIconActive]}>
+                        <Ionicons name="settings" size={22} color={activeTab === 'settings' ? '#10b981' : '#6b7f72'} />
+                    </View>
+                    <Text style={[styles.footerLabel, activeTab === 'settings' && styles.footerLabelActive]}>Settings</Text>
                 </TouchableOpacity>
             </View>
-
-            <ScrollView
-                style={styles.scrollView}
-                showsVerticalScrollIndicator={false}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={refresh}
-                        tintColor="#14b84b"
-                        colors={['#14b84b']}
-                    />
-                }
-            >
-                {/* Stats Grid */}
-                <View style={styles.statsGrid}>
-                    {/* Critical */}
-                    <View style={styles.statCard}>
-                        <View style={styles.statHeader}>
-                            <View style={[styles.statIconContainer, { backgroundColor: '#ef444420' }]}>
-                                <Text style={styles.statIcon}>⚠️</Text>
-                            </View>
-                            <View style={styles.statTrendUp}>
-                                <Text style={styles.statTrendText}>↑ 12%</Text>
-                            </View>
-                        </View>
-                        <Text style={styles.statValue}>{counts.critical}</Text>
-                        <Text style={styles.statLabel}>Critical Alerts</Text>
-                    </View>
-
-                    {/* Warnings */}
-                    <View style={styles.statCard}>
-                        <View style={styles.statHeader}>
-                            <View style={[styles.statIconContainer, { backgroundColor: '#f59e0b20' }]}>
-                                <Text style={styles.statIcon}>⚡</Text>
-                            </View>
-                            <View style={styles.statTrendDown}>
-                                <Text style={[styles.statTrendText, { color: '#14b84b' }]}>↓ 5%</Text>
-                            </View>
-                        </View>
-                        <Text style={styles.statValue}>{counts.warning}</Text>
-                        <Text style={styles.statLabel}>Warnings</Text>
-                    </View>
-
-                    {/* Resolved */}
-                    <View style={styles.statCard}>
-                        <View style={styles.statHeader}>
-                            <View style={[styles.statIconContainer, { backgroundColor: '#14b84b20' }]}>
-                                <Text style={styles.statIcon}>✓</Text>
-                            </View>
-                            <View style={styles.statTrendUp}>
-                                <Text style={[styles.statTrendText, { color: '#14b84b' }]}>↑ 20%</Text>
-                            </View>
-                        </View>
-                        <Text style={styles.statValue}>45</Text>
-                        <Text style={styles.statLabel}>Resolved (24h)</Text>
-                    </View>
-
-                    {/* Avg Resolution */}
-                    <View style={styles.statCard}>
-                        <View style={styles.statHeader}>
-                            <View style={[styles.statIconContainer, { backgroundColor: '#3b82f620' }]}>
-                                <Text style={styles.statIcon}>⏱️</Text>
-                            </View>
-                            <View style={styles.statTrendDown}>
-                                <Text style={[styles.statTrendText, { color: '#14b84b' }]}>↓ 8%</Text>
-                            </View>
-                        </View>
-                        <Text style={styles.statValue}>12m</Text>
-                        <Text style={styles.statLabel}>Avg. Resolution</Text>
-                    </View>
-                </View>
-
-                {/* Alert Trend Chart */}
-                <View style={styles.card}>
-                    <View style={styles.cardHeader}>
-                        <Text style={styles.cardTitle}>
-                            <Text style={styles.cardTitleIcon}>📊 </Text>
-                            Alert Trend
-                        </Text>
-                        <View style={styles.timeRangeContainer}>
-                            {['30m', '1h', '24h', '7d', '30d'].map((range) => (
-                                <TouchableOpacity
-                                    key={range}
-                                    style={[
-                                        styles.timeRangeButton,
-                                        timeRange === range && styles.timeRangeButtonActive,
-                                    ]}
-                                    onPress={() => setTimeRange(range)}
-                                >
-                                    <Text
-                                        style={[
-                                            styles.timeRangeText,
-                                            timeRange === range && styles.timeRangeTextActive,
-                                        ]}
-                                    >
-                                        {range}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </View>
-
-                    {/* Simple Bar Chart Visualization */}
-                    <View style={styles.chartContainer}>
-                        <View style={styles.chartBars}>
-                            {[40, 65, 45, 80, 55, 70, 50].map((height, idx) => (
-                                <View key={idx} style={styles.barColumn}>
-                                    <View style={styles.barStack}>
-                                        <View
-                                            style={[
-                                                styles.barSegment,
-                                                {
-                                                    height: `${height * 0.4}%`,
-                                                    backgroundColor: '#ef4444',
-                                                },
-                                            ]}
-                                        />
-                                        <View
-                                            style={[
-                                                styles.barSegment,
-                                                {
-                                                    height: `${height * 0.35}%`,
-                                                    backgroundColor: '#f59e0b',
-                                                },
-                                            ]}
-                                        />
-                                        <View
-                                            style={[
-                                                styles.barSegment,
-                                                {
-                                                    height: `${height * 0.25}%`,
-                                                    backgroundColor: '#3b82f6',
-                                                },
-                                            ]}
-                                        />
-                                    </View>
-                                    <Text style={styles.barLabel}>
-                                        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][idx]}
-                                    </Text>
-                                </View>
-                            ))}
-                        </View>
-                        <View style={styles.chartLegend}>
-                            <View style={styles.legendItem}>
-                                <View style={[styles.legendDot, { backgroundColor: '#ef4444' }]} />
-                                <Text style={styles.legendText}>Critical</Text>
-                            </View>
-                            <View style={styles.legendItem}>
-                                <View style={[styles.legendDot, { backgroundColor: '#f59e0b' }]} />
-                                <Text style={styles.legendText}>Warning</Text>
-                            </View>
-                            <View style={styles.legendItem}>
-                                <View style={[styles.legendDot, { backgroundColor: '#3b82f6' }]} />
-                                <Text style={styles.legendText}>Info</Text>
-                            </View>
-                        </View>
-                    </View>
-                </View>
-
-                {/* On-Call Status */}
-                <View style={styles.card}>
-                    <Text style={styles.cardTitle}>
-                        <Text style={styles.cardTitleIcon}>👥 </Text>
-                        On-Call Status
-                    </Text>
-
-                    <View style={styles.onCallCard}>
-                        <View style={styles.onCallHeader}>
-                            <View style={styles.avatar}>
-                                <Text style={styles.avatarText}>AR</Text>
-                            </View>
-                            <View style={styles.onCallInfo}>
-                                <Text style={styles.onCallName}>Alex Rivera</Text>
-                                <Text style={styles.onCallTeam}>Platform Team • Since 08:00</Text>
-                            </View>
-                            <View style={styles.activeStatusBadge}>
-                                <View style={styles.activeDot} />
-                                <Text style={styles.activeText}>Active</Text>
-                            </View>
-                        </View>
-                    </View>
-
-                    <View style={styles.nextOnCallContainer}>
-                        <Text style={styles.nextOnCallLabel}>Next On-Call</Text>
-                        <Text style={styles.nextOnCallText}>
-                            Sam Taylor • Backend Team • In 4 hours
-                        </Text>
-                    </View>
-                </View>
-
-                {/* Active Alerts */}
-                <View style={styles.card}>
-                    <View style={styles.cardHeader}>
-                        <Text style={styles.cardTitle}>
-                            <Text style={styles.cardTitleIcon}>🔔 </Text>
-                            Active Alerts
-                        </Text>
-                    </View>
-
-                    {loading && !refreshing ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color="#14b84b" />
-                            <Text style={styles.loadingText}>Loading alerts...</Text>
-                        </View>
-                    ) : error ? (
-                        <View style={styles.errorContainer}>
-                            <Text style={styles.errorText}>⚠️ {error}</Text>
-                            <TouchableOpacity onPress={refresh} style={styles.retryButton}>
-                                <Text style={styles.retryButtonText}>Retry</Text>
-                            </TouchableOpacity>
-                        </View>
-                    ) : alerts.length === 0 ? (
-                        <View style={styles.emptyContainer}>
-                            <Text style={styles.emptyIcon}>✓</Text>
-                            <Text style={styles.emptyText}>No active alerts</Text>
-                        </View>
-                    ) : (
-                        <View style={styles.alertsTable}>
-                            {/* Table Header */}
-                            <View style={styles.tableHeader}>
-                                <Text style={[styles.tableHeaderText, { flex: 1 }]}>Severity</Text>
-                                <Text style={[styles.tableHeaderText, { flex: 2 }]}>Service</Text>
-                                <Text style={[styles.tableHeaderText, { flex: 1 }]}>Time</Text>
-                                <Text style={[styles.tableHeaderText, { flex: 0.8 }]}>Action</Text>
-                            </View>
-
-                            {/* Table Rows */}
-                            {alerts
-                                .filter((alert) => alert.status !== 'resolved')
-                                .map((alert) => (
-                                    <TouchableOpacity
-                                        key={alert.alert_id}
-                                        style={[
-                                            styles.tableRow,
-                                            alert.acknowledged && styles.tableRowAcknowledged,
-                                        ]}
-                                        onPress={() => setSelectedAlert(alert)}
-                                    >
-                                        <View style={[styles.tableCell, { flex: 1 }]}>
-                                            <View
-                                                style={[
-                                                    styles.severityBadge,
-                                                    { backgroundColor: `${getSeverityColor(alert.severity)}20` },
-                                                ]}
-                                            >
-                                                <Text style={styles.severityIcon}>
-                                                    {getSeverityIcon(alert.severity)}
-                                                </Text>
-                                                <Text
-                                                    style={[
-                                                        styles.severityText,
-                                                        { color: getSeverityColor(alert.severity) },
-                                                    ]}
-                                                >
-                                                    {alert.severity.toUpperCase()}
-                                                </Text>
-                                            </View>
-                                        </View>
-
-                                        <View style={[styles.tableCell, { flex: 2 }]}>
-                                            <Text style={styles.serviceName} numberOfLines={1}>
-                                                🖥️ {alert.service}
-                                            </Text>
-                                            <Text style={styles.alertMessage} numberOfLines={1}>
-                                                {alert.message}
-                                            </Text>
-                                        </View>
-
-                                        <View style={[styles.tableCell, { flex: 1 }]}>
-                                            <Text style={styles.timeAgo}>{formatTime(alert.received_at)} ago</Text>
-                                            <Text style={styles.timeDate}>{formatDate(alert.received_at)}</Text>
-                                        </View>
-
-                                        <View style={[styles.tableCell, { flex: 0.8, alignItems: 'center' }]}>
-                                            {alert.acknowledged ? (
-                                                <View style={styles.acknowledgedBadge}>
-                                                    <Text style={styles.acknowledgedIcon}>✓</Text>
-                                                </View>
-                                            ) : (
-                                                <TouchableOpacity
-                                                    style={[
-                                                        styles.quickAckButton,
-                                                        acknowledgingId === alert.alert_id && styles.quickAckButtonLoading,
-                                                    ]}
-                                                    onPress={() => handleQuickAcknowledge(alert.alert_id)}
-                                                    disabled={acknowledgingId === alert.alert_id}
-                                                >
-                                                    {acknowledgingId === alert.alert_id ? (
-                                                        <ActivityIndicator size="small" color="#f59e0b" />
-                                                    ) : (
-                                                        <Text style={styles.quickAckIcon}>✓</Text>
-                                                    )}
-                                                </TouchableOpacity>
-                                            )}
-                                        </View>
-                                    </TouchableOpacity>
-                                ))}
-                        </View>
-                    )}
-                </View>
-
-                <View style={styles.bottomPadding} />
-            </ScrollView>
 
             {/* Alert Detail Modal */}
             <Modal
@@ -502,20 +684,29 @@ const DashboardScreen = () => {
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
+                        {/* Modal Header */}
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Alert Details</Text>
-                            <TouchableOpacity onPress={() => setSelectedAlert(null)}>
-                                <Text style={styles.closeButton}>✕</Text>
+                            <TouchableOpacity
+                                onPress={() => setSelectedAlert(null)}
+                                style={styles.closeButton}
+                            >
+                                <Text style={styles.closeButtonText}>×</Text>
                             </TouchableOpacity>
                         </View>
 
                         {selectedAlert && (
-                            <ScrollView style={styles.modalBody}>
+                            <ScrollView
+                                style={styles.modalBody}
+                                showsVerticalScrollIndicator={false}
+                            >
+                                {/* Severity Badge */}
                                 <View
                                     style={[
                                         styles.modalSeverityBadge,
                                         {
-                                            backgroundColor: `${getSeverityColor(selectedAlert.severity)}20`,
+                                            backgroundColor: `${getSeverityColor(selectedAlert.severity)}15`,
+                                            borderColor: getSeverityColor(selectedAlert.severity),
                                         },
                                     ]}
                                 >
@@ -525,48 +716,43 @@ const DashboardScreen = () => {
                                             { color: getSeverityColor(selectedAlert.severity) },
                                         ]}
                                     >
-                                        {getSeverityIcon(selectedAlert.severity)}{' '}
                                         {selectedAlert.severity.toUpperCase()}
                                     </Text>
                                 </View>
 
-                                <Text style={styles.modalService}>🖥️ {selectedAlert.service}</Text>
+                                {/* Service & Message */}
+                                <Text style={styles.modalService}>{selectedAlert.service}</Text>
                                 <Text style={styles.modalMessage}>{selectedAlert.message}</Text>
                                 <Text style={styles.modalTime}>
-                                    Received {formatTime(selectedAlert.received_at)} ago
+                                    {formatDate(selectedAlert.received_at)} • {formatTime(selectedAlert.received_at)} ago
                                 </Text>
 
                                 {/* AI Explanation */}
-                                <View style={styles.aiExplanationCard}>
-                                    <View style={styles.aiExplanationHeader}>
-                                        <Text style={styles.aiIcon}>🤖</Text>
-                                        <Text style={styles.aiTitle}>AI Explanation</Text>
-                                    </View>
+                                <View style={styles.aiCard}>
+                                    <Text style={styles.aiTitle}>AI Analysis</Text>
 
                                     {loadingExplanation ? (
-                                        <View style={styles.explanationLoading}>
-                                            <ActivityIndicator size="small" color="#3b82f6" />
-                                            <Text style={styles.explanationLoadingText}>
-                                                Generating explanation...
+                                        <View style={styles.aiLoading}>
+                                            <ActivityIndicator size="small" color="#10b981" />
+                                            <Text style={styles.aiLoadingText}>
+                                                Analyzing alert...
                                             </Text>
                                         </View>
                                     ) : explanationError ? (
-                                        <View style={styles.explanationError}>
-                                            <Text style={styles.explanationErrorText}>
-                                                ⚠️ {explanationError}
-                                            </Text>
+                                        <View style={styles.aiError}>
+                                            <Text style={styles.aiErrorText}>{explanationError}</Text>
                                             <TouchableOpacity
                                                 onPress={() => fetchAIExplanation(selectedAlert.alert_id)}
-                                                style={styles.retryExplanationButton}
+                                                style={styles.aiRetryButton}
                                             >
-                                                <Text style={styles.retryExplanationText}>Retry</Text>
+                                                <Text style={styles.aiRetryText}>Retry</Text>
                                             </TouchableOpacity>
                                         </View>
                                     ) : aiExplanation?.explanation ? (
                                         <>
                                             <Text style={styles.aiText}>{aiExplanation.explanation}</Text>
                                             {aiExplanation.created_at && (
-                                                <Text style={styles.explanationTime}>
+                                                <Text style={styles.aiTimestamp}>
                                                     Generated {formatDate(aiExplanation.created_at)}
                                                 </Text>
                                             )}
@@ -577,42 +763,63 @@ const DashboardScreen = () => {
                                 </View>
 
                                 {/* Action Buttons */}
-                                <View style={styles.modalActions}>
-                                    <TouchableOpacity style={styles.runbookButton}>
-                                        <Text style={styles.actionButtonText}>▶️ Run Runbook</Text>
-                                    </TouchableOpacity>
-
-                                    {!selectedAlert.acknowledged && (
+                                <View style={styles.actionButtons}>
+                                    {/* Row 1 */}
+                                    <View style={styles.actionRow}>
                                         <TouchableOpacity
                                             style={[
-                                                styles.acknowledgeButton,
-                                                acknowledging && styles.buttonDisabled,
+                                                styles.actionBtn,
+                                                selectedAlert.acknowledged && styles.actionBtnAcknowledged,
                                             ]}
                                             onPress={handleAcknowledge}
-                                            disabled={acknowledging}
+                                            disabled={acknowledging || selectedAlert.acknowledged}
                                         >
                                             {acknowledging ? (
-                                                <ActivityIndicator size="small" color="#FFFFFF" />
+                                                <ActivityIndicator size="small" color="#10b981" />
                                             ) : (
-                                                <Text style={styles.actionButtonText}>✓ Acknowledge</Text>
+                                                <>
+                                                    <Text style={[
+                                                        styles.actionBtnIcon,
+                                                        selectedAlert.acknowledged && styles.actionBtnIconAck
+                                                    ]}>✓</Text>
+                                                    <Text style={[
+                                                        styles.actionBtnText,
+                                                        selectedAlert.acknowledged && styles.actionBtnTextAck
+                                                    ]}>
+                                                        {selectedAlert.acknowledged ? 'Acknowledged' : 'Ack'}
+                                                    </Text>
+                                                </>
                                             )}
                                         </TouchableOpacity>
-                                    )}
 
-                                    <TouchableOpacity
-                                        style={[
-                                            styles.resolveButton,
-                                            resolving && styles.buttonDisabled,
-                                        ]}
-                                        onPress={handleResolve}
-                                        disabled={resolving}
-                                    >
-                                        {resolving ? (
-                                            <ActivityIndicator size="small" color="#FFFFFF" />
-                                        ) : (
-                                            <Text style={styles.actionButtonText}>✓ Resolve</Text>
-                                        )}
-                                    </TouchableOpacity>
+                                        <TouchableOpacity style={styles.actionBtn}>
+                                            <Text style={styles.actionBtnIcon}>⏰</Text>
+                                            <Text style={styles.actionBtnText}>Snooze</Text>
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    {/* Row 2 */}
+                                    <View style={styles.actionRow}>
+                                        <TouchableOpacity style={styles.actionBtn}>
+                                            <Text style={styles.actionBtnIcon}>🧪</Text>
+                                            <Text style={styles.actionBtnText}>Dry-run</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={styles.actionBtnPrimary}
+                                            onPress={handleResolve}
+                                            disabled={resolving}
+                                        >
+                                            {resolving ? (
+                                                <ActivityIndicator size="small" color="#FFFFFF" />
+                                            ) : (
+                                                <>
+                                                    <Text style={styles.actionBtnPrimaryIcon}>✓</Text>
+                                                    <Text style={styles.actionBtnPrimaryText}>Approve & Fix</Text>
+                                                </>
+                                            )}
+                                        </TouchableOpacity>
+                                    </View>
                                 </View>
                             </ScrollView>
                         )}
@@ -626,151 +833,163 @@ const DashboardScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0F1612',
+        backgroundColor: '#0a0f0d',
     },
-    header: {
-        backgroundColor: '#1c261f',
-        paddingHorizontal: 20,
-        paddingTop: 60,
-        paddingBottom: 16,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
         alignItems: 'center',
-        borderBottomWidth: 1,
-        borderBottomColor: '#3c5344',
     },
-    headerTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
+    centerContainer: {
+        paddingVertical: 60,
+        alignItems: 'center',
+    },
+    loadingText: {
+        marginTop: 16,
+        fontSize: 15,
+        color: '#6b7f72',
+        fontWeight: '500',
+    },
+    errorIcon: {
+        fontSize: 48,
+        color: '#ef4444',
+        marginBottom: 12,
+    },
+    errorText: {
+        fontSize: 15,
+        color: '#ef4444',
+        marginBottom: 24,
+        textAlign: 'center',
+        paddingHorizontal: 32,
+    },
+    retryButton: {
+        backgroundColor: '#10b981',
+        paddingHorizontal: 28,
+        paddingVertical: 12,
+        borderRadius: 10,
+    },
+    retryButtonText: {
         color: '#FFFFFF',
+        fontSize: 15,
+        fontWeight: '700',
     },
-    headerSubtitle: {
-        fontSize: 12,
-        color: '#9db8a6',
-        marginTop: 2,
+    emptyIcon: {
+        fontSize: 64,
+        marginBottom: 16,
     },
-    signOutButton: {
-        backgroundColor: '#ef4444',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 8,
+    emptyTitle: {
+        fontSize: 20,
+        color: '#10b981',
+        fontWeight: '700',
+        marginBottom: 8,
     },
-    signOutText: {
-        color: '#FFFFFF',
-        fontSize: 14,
-        fontWeight: '600',
+    emptyText: {
+        fontSize: 15,
+        color: '#6b7f72',
     },
     scrollView: {
         flex: 1,
     },
+    scrollContent: {
+        paddingBottom: 0,
+    },
+    pageTitle: {
+        fontSize: 32,
+        fontWeight: '800',
+        color: '#FFFFFF',
+        marginBottom: 24,
+        letterSpacing: -1,
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#e5e7eb',
+        marginBottom: 16,
+        letterSpacing: -0.3,
+    },
+    statsContainer: {
+        paddingHorizontal: 24,
+        paddingTop: 60,
+    },
     statsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        padding: 12,
         gap: 12,
     },
     statCard: {
         backgroundColor: '#1c261f',
-        borderRadius: 12,
-        padding: 16,
-        width: (width - 48) / 2,
+        borderRadius: 16,
+        padding: 18,
+        width: (width - 60) / 2,
         borderWidth: 1,
-        borderColor: '#3c5344',
+        borderColor: '#2d3a32',
     },
-    statHeader: {
+    statCardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 12,
+        marginBottom: 14,
     },
-    statIconContainer: {
-        width: 36,
-        height: 36,
-        borderRadius: 8,
+    statIconBadge: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    statIcon: {
-        fontSize: 18,
+    statIconText: {
+        fontSize: 20,
+        fontWeight: 'bold',
     },
-    statTrendUp: {
+    statTrend: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 3,
     },
-    statTrendDown: {
-        flexDirection: 'row',
-        alignItems: 'center',
+    statTrendIcon: {
+        fontSize: 11,
+        fontWeight: 'bold',
     },
     statTrendText: {
         fontSize: 11,
-        fontWeight: '600',
-        color: '#ef4444',
+        fontWeight: '700',
     },
     statValue: {
-        fontSize: 28,
-        fontWeight: 'bold',
+        fontSize: 32,
+        fontWeight: '800',
         color: '#FFFFFF',
         marginBottom: 4,
+        letterSpacing: -1,
     },
     statLabel: {
-        fontSize: 12,
-        color: '#9db8a6',
+        fontSize: 13,
+        color: '#6b7f72',
+        fontWeight: '600',
     },
-    card: {
+    chartSection: {
+        paddingHorizontal: 24,
+        paddingTop: 32,
+    },
+    chartCard: {
         backgroundColor: '#1c261f',
-        borderRadius: 12,
-        padding: 16,
-        marginHorizontal: 16,
-        marginBottom: 16,
+        borderRadius: 20,
+        padding: 20,
+        paddingTop: 16,
         borderWidth: 1,
-        borderColor: '#3c5344',
-    },
-    cardHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    cardTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#FFFFFF',
-    },
-    cardTitleIcon: {
-        fontSize: 16,
-    },
-    timeRangeContainer: {
-        flexDirection: 'row',
-        backgroundColor: '#111813',
-        borderRadius: 8,
-        padding: 2,
-    },
-    timeRangeButton: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
-    },
-    timeRangeButtonActive: {
-        backgroundColor: '#1c261f',
-    },
-    timeRangeText: {
-        fontSize: 10,
-        color: '#9db8a6',
-        fontWeight: '500',
-    },
-    timeRangeTextActive: {
-        color: '#14b84b',
-        fontWeight: '600',
+        borderColor: '#2d3a32',
     },
     chartContainer: {
         marginTop: 8,
+        paddingVertical: 4,
     },
     chartBars: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-end',
-        height: 150,
-        marginBottom: 12,
+        height: 180,
+        marginBottom: 16,
+        paddingHorizontal: 8,
+        paddingTop: 8,
     },
     barColumn: {
         flex: 1,
@@ -778,409 +997,551 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
     },
     barStack: {
-        width: '80%',
+        width: '70%',
         height: '100%',
         justifyContent: 'flex-end',
+        gap: 2,
+        overflow: 'hidden',
     },
     barSegment: {
         width: '100%',
-        borderTopLeftRadius: 3,
-        borderTopRightRadius: 3,
+        borderRadius: 6,
+        minHeight: 4,
     },
     barLabel: {
-        fontSize: 9,
-        color: '#9db8a6',
+        fontSize: 11,
+        color: '#6b7f72',
+        marginTop: 10,
+        fontWeight: '700',
+    },
+    barCount: {
+        fontSize: 10,
+        color: '#10b981',
         marginTop: 4,
+        fontWeight: '700',
     },
     chartLegend: {
         flexDirection: 'row',
         justifyContent: 'center',
-        gap: 16,
-        marginTop: 8,
+        gap: 24,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: '#2d3a32',
     },
     legendItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
+        gap: 8,
     },
     legendDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+    },
+    legendText: {
+        fontSize: 13,
+        color: '#9ca3af',
+        fontWeight: '600',
+    },
+    alertsSection: {
+        paddingHorizontal: 24,
+        paddingTop: 32,
+    },
+    alertsHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    alertCountBadge: {
+        backgroundColor: '#10b98120',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#10b98140',
+    },
+    alertCountText: {
+        color: '#10b981',
+        fontSize: 14,
+        fontWeight: '800',
+    },
+    alertsList: {
+        gap: 14,
+    },
+    alertCard: {
+        backgroundColor: '#1c261f',
+        borderRadius: 16,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: '#2d3a32',
+        flexDirection: 'row',
+    },
+    alertCardActive: {
+        borderWidth: 2,
+        borderColor: '#10b981',
+        shadowColor: '#10b981',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    alertIndicator: {
+        width: 4,
+    },
+    alertContent: {
+        flex: 1,
+        padding: 16,
+    },
+    alertHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 12,
+    },
+    alertHeaderLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        flex: 1,
+    },
+    alertSeverityBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 8,
+        borderWidth: 1,
+    },
+    alertSeverityText: {
+        fontSize: 11,
+        fontWeight: '800',
+        letterSpacing: 0.5,
+    },
+    alertService: {
+        fontSize: 15,
+        color: '#10b981',
+        fontWeight: '700',
+    },
+    alertHeaderRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    alertTime: {
+        fontSize: 13,
+        color: '#6b7f72',
+        fontWeight: '700',
+    },
+    newDot: {
         width: 8,
         height: 8,
         borderRadius: 4,
-    },
-    legendText: {
-        fontSize: 11,
-        color: '#9db8a6',
-    },
-    onCallCard: {
-        backgroundColor: '#14b84b10',
-        borderRadius: 12,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: '#14b84b30',
-        marginBottom: 12,
-    },
-    onCallHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    avatar: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: '#14b84b',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    avatarText: {
-        color: '#FFFFFF',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    onCallInfo: {
-        flex: 1,
-        marginLeft: 12,
-    },
-    onCallName: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#FFFFFF',
-    },
-    onCallTeam: {
-        fontSize: 12,
-        color: '#9db8a6',
-        marginTop: 2,
-    },
-    activeStatusBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#14b84b20',
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 12,
-        gap: 4,
-    },
-    activeDot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        backgroundColor: '#14b84b',
-    },
-    activeText: {
-        fontSize: 11,
-        fontWeight: '600',
-        color: '#14b84b',
-    },
-    nextOnCallContainer: {
-        paddingTop: 12,
-        borderTopWidth: 1,
-        borderTopColor: '#3c5344',
-    },
-    nextOnCallLabel: {
-        fontSize: 12,
-        fontWeight: '500',
-        color: '#9db8a6',
-        marginBottom: 4,
-    },
-    nextOnCallText: {
-        fontSize: 12,
-        color: '#FFFFFF',
-    },
-    alertsTable: {
-        marginTop: 8,
-    },
-    tableHeader: {
-        flexDirection: 'row',
-        paddingVertical: 12,
-        paddingHorizontal: 12,
-        backgroundColor: '#111813',
-        borderRadius: 8,
-        marginBottom: 8,
-    },
-    tableHeaderText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: '#9db8a6',
-        textTransform: 'uppercase',
-    },
-    tableRow: {
-        flexDirection: 'row',
-        paddingVertical: 12,
-        paddingHorizontal: 12,
-        backgroundColor: '#111813',
-        borderRadius: 8,
-        marginBottom: 8,
-        borderWidth: 1,
-        borderColor: '#3c5344',
-    },
-    tableRowAcknowledged: {
-        opacity: 0.6,
-        borderColor: '#f59e0b40',
-    },
-    tableCell: {
-        justifyContent: 'center',
-    },
-    severityBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
-        gap: 4,
-    },
-    severityIcon: {
-        fontSize: 12,
-    },
-    severityText: {
-        fontSize: 10,
-        fontWeight: '700',
-    },
-    serviceName: {
-        fontSize: 13,
-        color: '#9db8a6',
-        fontWeight: '500',
-        marginBottom: 2,
+        backgroundColor: '#10b981',
     },
     alertMessage: {
-        fontSize: 11,
-        color: '#FFFFFF',
+        fontSize: 15,
+        color: '#e5e7eb',
+        lineHeight: 22,
+        marginBottom: 14,
     },
-    timeAgo: {
-        fontSize: 11,
-        color: '#9db8a6',
-        marginBottom: 2,
-    },
-    timeDate: {
-        fontSize: 9,
-        color: '#6b7280',
-    },
-    quickAckButton: {
-        backgroundColor: '#f59e0b20',
-        borderWidth: 1,
-        borderColor: '#f59e0b40',
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        justifyContent: 'center',
+    alertFooter: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#2d3a32',
     },
-    quickAckButtonLoading: {
-        opacity: 0.5,
+    alertDate: {
+        fontSize: 12,
+        color: '#6b7f72',
+        fontWeight: '500',
     },
-    quickAckIcon: {
-        fontSize: 14,
-        color: '#f59e0b',
+    ackButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#10b98120',
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 10,
+        gap: 6,
+        borderWidth: 1,
+        borderColor: '#10b98150',
+    },
+    ackButtonIcon: {
+        fontSize: 12,
+        color: '#10b981',
         fontWeight: 'bold',
     },
-    acknowledgedBadge: {
-        backgroundColor: '#14b84b20',
-        borderWidth: 1,
-        borderColor: '#14b84b40',
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        justifyContent: 'center',
-        alignItems: 'center',
+    ackButtonText: {
+        fontSize: 13,
+        color: '#10b981',
+        fontWeight: '700',
     },
-    acknowledgedIcon: {
-        fontSize: 14,
-        color: '#14b84b',
+    ackBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#10b98115',
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 10,
+        gap: 6,
+        borderWidth: 1,
+        borderColor: '#10b98130',
+    },
+    ackBadgeIcon: {
+        fontSize: 12,
+        color: '#10b981',
         fontWeight: 'bold',
     },
-    loadingContainer: {
-        alignItems: 'center',
-        paddingVertical: 40,
-    },
-    loadingText: {
-        marginTop: 12,
-        fontSize: 14,
-        color: '#9db8a6',
-    },
-    errorContainer: {
-        alignItems: 'center',
-        paddingVertical: 40,
-    },
-    errorText: {
-        fontSize: 14,
-        color: '#ef4444',
-        marginBottom: 16,
-        textAlign: 'center',
-    },
-    retryButton: {
-        backgroundColor: '#14b84b',
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderRadius: 8,
-    },
-    retryButtonText: {
-        color: '#FFFFFF',
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    emptyContainer: {
-        alignItems: 'center',
-        paddingVertical: 40,
-    },
-    emptyIcon: {
-        fontSize: 48,
-        marginBottom: 12,
-    },
-    emptyText: {
-        fontSize: 16,
-        color: '#14b84b',
+    ackBadgeText: {
+        fontSize: 13,
+        color: '#10b981',
+        fontWeight: '700',
     },
     bottomPadding: {
-        height: 20,
+        height: 100,
+    },
+    footer: {
+        flexDirection: 'row',
+        backgroundColor: '#1c261f',
+        borderTopWidth: 1,
+        borderTopColor: '#2d3a32',
+        paddingBottom: 20,
+        paddingTop: 12,
+        paddingHorizontal: 8,
+    },
+    footerTab: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 8,
+    },
+    footerIconContainer: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
+    footerIconActive: {
+        backgroundColor: '#10b98120',
+    },
+    footerLabel: {
+        fontSize: 11,
+        color: '#6b7f72',
+        fontWeight: '600',
+    },
+    footerLabelActive: {
+        color: '#10b981',
+        fontWeight: '700',
+    },
+    settingsContainer: {
+        paddingHorizontal: 24,
+        paddingTop: 60,
+    },
+    settingsSection: {
+        marginBottom: 32,
+    },
+    settingsSectionTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#6b7f72',
+        marginBottom: 12,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    settingsCard: {
+        backgroundColor: '#1c261f',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#2d3a32',
+        overflow: 'hidden',
+    },
+    accountInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 20,
+    },
+    avatarCircle: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: '#10b98120',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 16,
+    },
+    accountDetails: {
+        flex: 1,
+    },
+    accountName: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        marginBottom: 4,
+    },
+    accountId: {
+        fontSize: 13,
+        color: '#6b7f72',
+        fontWeight: '500',
+    },
+    settingsItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 16,
+        paddingHorizontal: 20,
+    },
+    settingsItemLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 14,
+        flex: 1,
+    },
+    settingsItemRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    settingsItemText: {
+        fontSize: 15,
+        color: '#e5e7eb',
+        fontWeight: '600',
+    },
+    settingsValueText: {
+        fontSize: 14,
+        color: '#6b7f72',
+        fontWeight: '500',
+    },
+    settingsToggle: {
+        backgroundColor: '#10b98120',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#10b98140',
+    },
+    settingsToggleText: {
+        fontSize: 13,
+        color: '#10b981',
+        fontWeight: '700',
+    },
+    settingsDivider: {
+        height: 1,
+        backgroundColor: '#2d3a32',
+        marginLeft: 54,
+    },
+    signOutButtonLarge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#ef4444',
+        paddingVertical: 16,
+        borderRadius: 16,
+        gap: 10,
+        marginTop: 8,
+        shadowColor: '#ef4444',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    signOutButtonText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        letterSpacing: 0.3,
     },
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
         justifyContent: 'flex-end',
     },
     modalContent: {
-        backgroundColor: '#1c261f',
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        maxHeight: '85%',
+        backgroundColor: '#0f1612',
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        maxHeight: '90%',
+        borderTopWidth: 2,
+        borderColor: '#10b981',
     },
     modalHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 20,
+        padding: 24,
+        paddingBottom: 20,
         borderBottomWidth: 1,
-        borderBottomColor: '#3c5344',
+        borderBottomColor: '#2d3a32',
     },
     modalTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
+        fontSize: 22,
+        fontWeight: '800',
         color: '#FFFFFF',
+        letterSpacing: -0.5,
     },
     closeButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#1c261f',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    closeButtonText: {
         fontSize: 28,
-        color: '#9db8a6',
+        color: '#6b7f72',
+        fontWeight: '300',
+        marginTop: -2,
     },
     modalBody: {
-        padding: 20,
+        padding: 24,
     },
     modalSeverityBadge: {
         alignSelf: 'flex-start',
         paddingHorizontal: 16,
         paddingVertical: 8,
-        borderRadius: 8,
-        marginBottom: 16,
+        borderRadius: 10,
+        marginBottom: 20,
+        borderWidth: 1,
     },
     modalSeverityText: {
         fontSize: 13,
-        fontWeight: '700',
+        fontWeight: '800',
+        letterSpacing: 0.5,
     },
     modalService: {
-        fontSize: 16,
-        color: '#9db8a6',
+        fontSize: 17,
+        color: '#10b981',
         marginBottom: 12,
+        fontWeight: '700',
     },
     modalMessage: {
         fontSize: 18,
         color: '#FFFFFF',
-        fontWeight: '500',
+        fontWeight: '600',
         marginBottom: 16,
-        lineHeight: 24,
+        lineHeight: 26,
     },
     modalTime: {
-        fontSize: 14,
-        color: '#9db8a6',
-        marginBottom: 24,
+        fontSize: 13,
+        color: '#6b7f72',
+        marginBottom: 28,
+        fontWeight: '500',
     },
-    aiExplanationCard: {
-        backgroundColor: '#3b82f610',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 24,
+    aiCard: {
+        backgroundColor: '#10b98110',
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 28,
         borderWidth: 1,
-        borderColor: '#3b82f630',
-    },
-    aiExplanationHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    aiIcon: {
-        fontSize: 20,
-        marginRight: 8,
+        borderColor: '#10b98130',
     },
     aiTitle: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#3b82f6',
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#10b981',
+        marginBottom: 14,
     },
     aiText: {
-        fontSize: 14,
-        color: '#FFFFFF',
-        lineHeight: 20,
+        fontSize: 15,
+        color: '#e5e7eb',
+        lineHeight: 24,
     },
-    explanationLoading: {
+    aiLoading: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
+        gap: 16,
     },
-    explanationLoadingText: {
+    aiLoadingText: {
         fontSize: 14,
-        color: '#9db8a6',
+        color: '#6b7f72',
     },
-    explanationError: {
+    aiError: {
         alignItems: 'center',
     },
-    explanationErrorText: {
-        fontSize: 13,
+    aiErrorText: {
+        fontSize: 14,
         color: '#ef4444',
-        marginBottom: 12,
+        marginBottom: 16,
         textAlign: 'center',
     },
-    retryExplanationButton: {
-        backgroundColor: '#3b82f6',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 6,
+    aiRetryButton: {
+        backgroundColor: '#10b981',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 10,
     },
-    retryExplanationText: {
-        fontSize: 12,
+    aiRetryText: {
+        fontSize: 13,
         color: '#FFFFFF',
-        fontWeight: '600',
+        fontWeight: '700',
     },
-    explanationTime: {
-        fontSize: 11,
-        color: '#9db8a6',
-        marginTop: 12,
+    aiTimestamp: {
+        fontSize: 12,
+        color: '#6b7f72',
+        marginTop: 16,
         fontStyle: 'italic',
     },
-    modalActions: {
+    actionButtons: {
         gap: 12,
     },
-    runbookButton: {
-        backgroundColor: '#8b5cf6',
+    actionRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    actionBtn: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: '#1c261f',
+        borderWidth: 1,
+        borderColor: '#3c5344',
         paddingVertical: 14,
         borderRadius: 12,
-        alignItems: 'center',
     },
-    acknowledgeButton: {
-        backgroundColor: '#f59e0b',
-        paddingVertical: 14,
-        borderRadius: 12,
-        alignItems: 'center',
+    actionBtnAcknowledged: {
+        backgroundColor: '#10b98115',
+        borderColor: '#10b98140',
     },
-    resolveButton: {
-        backgroundColor: '#14b84b',
-        paddingVertical: 14,
-        borderRadius: 12,
-        alignItems: 'center',
-    },
-    buttonDisabled: {
-        opacity: 0.5,
-    },
-    actionButtonText: {
+    actionBtnIcon: {
         fontSize: 16,
-        fontWeight: '600',
+        color: '#e5e7eb',
+    },
+    actionBtnIconAck: {
+        color: '#10b981',
+    },
+    actionBtnText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#e5e7eb',
+    },
+    actionBtnTextAck: {
+        color: '#10b981',
+    },
+    actionBtnPrimary: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: '#10b981',
+        paddingVertical: 14,
+        borderRadius: 12,
+    },
+    actionBtnPrimaryIcon: {
+        fontSize: 16,
         color: '#FFFFFF',
+        fontWeight: 'bold',
+    },
+    actionBtnPrimaryText: {
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#FFFFFF',
+        letterSpacing: 0.3,
     },
 });
 
