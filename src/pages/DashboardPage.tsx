@@ -16,10 +16,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAlerts } from '../hooks/useAlerts';
 import { alertsService, AlertExplanation } from '../services/alerts.service';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 
 const DashboardScreen = () => {
+    const navigation = useNavigation();
+
     const { user, tenantId, signOut } = useAuth();
     const { alerts, loading, error, refreshing, counts, refresh } = useAlerts(tenantId);
     const [selectedAlert, setSelectedAlert] = useState<any>(null);
@@ -644,7 +647,7 @@ const DashboardScreen = () => {
                 <TouchableOpacity
                     style={styles.footerTab}
                     activeOpacity={0.7}
-                    onPress={() => setActiveTab('oncall')}
+                    onPress={() => navigation.navigate('OnCall' as never)}
                 >
                     <View style={[styles.footerIconContainer, activeTab === 'oncall' && styles.footerIconActive]}>
                         <Ionicons name="people" size={22} color={activeTab === 'oncall' ? '#10b981' : '#6b7f72'} />
