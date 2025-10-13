@@ -500,7 +500,7 @@ export const SignupPage = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0a0f0d',
+        backgroundColor: '#111813',
     },
     scrollContent: {
         flexGrow: 1,
@@ -524,6 +524,7 @@ const styles = StyleSheet.create({
         fontSize: 32,
         fontWeight: '800',
         color: '#FFFFFF',
+        paddingTop:50,
         marginBottom: 8,
         textAlign: 'center',
         letterSpacing: -1,

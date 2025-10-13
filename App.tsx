@@ -9,7 +9,7 @@ import { LoginPage } from './src/components/auth/LoginPage';
 import { SignupPage } from './src/components/auth/SignupPage';
 import DashboardScreen from './src/pages/DashboardPage';
 import OnCallPage from "./src/pages/OnCallPage";
-
+import SettingsScreen from "./src/pages/Settings";
 import { ActivityIndicator, View } from 'react-native';
 
 console.log('✅ Polyfills loaded');
@@ -36,14 +36,17 @@ const AppNavigator = () => {
         <NavigationContainer>
             <Stack.Navigator screenOptions={{ headerShown: false }}>
                 {isAuthenticated ? (
-                    <Stack.Screen name="Dashboard" component={DashboardScreen} />
+                    <>
+                        <Stack.Screen name="Dashboard" component={DashboardScreen} />
+                        <Stack.Screen name="OnCall" component={OnCallPage} />
+                        <Stack.Screen name="Settings" component={SettingsScreen} />
+                    </>
                 ) : (
                     <>
                         <Stack.Screen name="Login" component={LoginPage} />
                         <Stack.Screen name="Signup" component={SignupPage} />
                     </>
                 )}
-                <Stack.Screen name="OnCall" component={OnCallPage} />
             </Stack.Navigator>
         </NavigationContainer>
     );

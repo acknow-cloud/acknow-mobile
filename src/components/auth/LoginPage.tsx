@@ -136,7 +136,7 @@ export const LoginPage = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0a0f0d',
+        backgroundColor: '#111813',
     },
     scrollContent: {
         flexGrow: 1,

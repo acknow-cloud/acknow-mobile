@@ -10,12 +10,13 @@ import {
     TextInput,
     ActivityIndicator,
     Alert,
-    SafeAreaView,
+    StatusBar,  // Add StatusBar, remove SafeAreaView
     Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { oncallService, OnCallEntry } from '../services/oncall.service';
+import FooterNavigation, { TabName } from '../components/shared/Footer';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CALENDAR_PADDING = 32; // 16px on each side
@@ -98,6 +99,7 @@ export default function OnCallPage() {
         () => [...Array(7)].map((_, i) => fmtISO(addDays(weekStart, i))),
         [weekStart]
     );
+    const [activeTab, setActiveTab] = useState<TabName>('oncall');
 
     const [baseMonth, setBaseMonth] = useState<Date>(startOfMonth(new Date()));
     const [entries, setEntries] = useState<OnCallEntry[]>([]);
@@ -106,7 +108,20 @@ export default function OnCallPage() {
     const [selectedDay, setSelectedDay] = useState<string | null>(null);
     const [modalVisible, setModalVisible] = useState<boolean>(false);
     const [editing, setEditing] = useState<OnCallEntry | null>(null);
+    const handleTabChange = (tab: TabName) => {
+        setActiveTab(tab);
 
+        // Navigate to other screens
+        if (tab === 'dashboard') {
+            navigation.navigate('Dashboard' as never);
+        } else if (tab === 'incidents') {
+            navigation.navigate('Incidents' as never);
+        } else if (tab === 'reports') {
+            navigation.navigate('Reports' as never);
+        } else if (tab === 'settings') {
+            navigation.navigate('Settings' as never);
+        }
+    };
     const entriesByDate = useMemo<Map<string, OnCallEntry[]>>(() => {
         const m = new Map<string, OnCallEntry[]>();
         for (const e of entries) {
@@ -232,10 +247,9 @@ export default function OnCallPage() {
     }
 
     return (
-        <SafeAreaView style={styles.container}>
-            {/* Header */}
+        <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>On-Call Schedule</Text>
+            <Text style={styles.headerTitle}>On-Call Schedule</Text>
                 <TouchableOpacity onPress={() => openAdd(todayISO)} style={styles.addButton}>
                     <Ionicons name="add" size={20} color="#FFFFFF" />
                 </TouchableOpacity>
@@ -390,28 +404,10 @@ export default function OnCallPage() {
             </ScrollView>
 
             {/* Footer Navigation */}
-            <View style={styles.footer}>
-                <TouchableOpacity
-                    style={styles.footerButton}
-                    onPress={() => navigation.navigate('Dashboard' as never)}
-                >
-                    <Ionicons name="home-outline" size={24} color="#6b7f72" />
-                    <Text style={styles.footerButtonText}>Dashboard</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.footerButton, styles.footerButtonActive]}>
-                    <Ionicons name="calendar" size={24} color="#10b981" />
-                    <Text style={[styles.footerButtonText, styles.footerButtonTextActive]}>
-                        On-Call
-                    </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={styles.footerButton}
-                    onPress={() => navigation.navigate('Profile' as never)}
-                >
-                    <Ionicons name="person-outline" size={24} color="#6b7f72" />
-                    <Text style={styles.footerButtonText}>Profile</Text>
-                </TouchableOpacity>
-            </View>
+            <FooterNavigation
+                activeTab={activeTab}
+                onTabChange={handleTabChange}
+            />
 
             {/* Add/Edit Modal */}
             <AddEditModal
@@ -422,7 +418,7 @@ export default function OnCallPage() {
                 onSave={handleSave}
                 existingForDate={(iso) => entries.filter((e) => e.date === iso)}
             />
-        </SafeAreaView>
+        </View>
     );
 }
 
@@ -803,7 +799,7 @@ function AddEditModal({
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0a0f0d',
+        backgroundColor: '#111813',
     },
     header: {
         flexDirection: 'row',
@@ -811,14 +807,17 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingVertical: 12,
+        paddingTop: 50,
+        marginTop:10,// Add this line - accounts for status bar
         borderBottomWidth: 1,
         borderBottomColor: '#2d3a32',
-        backgroundColor: '#0a0f0d',
+        backgroundColor: '#111813',
     },
     headerTitle: {
-        fontSize: 20,
-        fontWeight: '700',
+        fontSize: 32,
+        fontWeight: '800',
         color: '#FFFFFF',
+        letterSpacing: -1,
     },
     addButton: {
         width: 40,
@@ -1086,31 +1085,7 @@ const styles = StyleSheet.create({
         borderRadius: 6,
         backgroundColor: '#243126',
     },
-    footer: {
-        flexDirection: 'row',
-        backgroundColor: '#1c261f',
-        borderTopWidth: 1,
-        borderTopColor: '#2d3a32',
-        paddingBottom: 8,
-        paddingTop: 8,
-    },
-    footerButton: {
-        flex: 1,
-        alignItems: 'center',
-        paddingVertical: 8,
-    },
-    footerButtonActive: {},
-    footerButtonText: {
-        fontSize: 11,
-        color: '#6b7f72',
-        marginTop: 4,
-        fontWeight: '500',
-    },
-    footerButtonTextActive: {
-        color: '#10b981',
-        fontWeight: '600',
-    },
-    // Modal styles
+
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.7)',

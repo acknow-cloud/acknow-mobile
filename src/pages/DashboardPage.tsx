@@ -12,6 +12,7 @@ import {
     Alert,
     StatusBar,
 } from 'react-native';
+import FooterNavigation, {TabName} from '../components/shared/Footer'
 import { useAuth } from '../contexts/AuthContext';
 import { useAlerts } from '../hooks/useAlerts';
 import { alertsService, AlertExplanation } from '../services/alerts.service';
@@ -26,7 +27,7 @@ const DashboardScreen = () => {
     const { user, tenantId, signOut } = useAuth();
     const { alerts, loading, error, refreshing, counts, refresh } = useAlerts(tenantId);
     const [selectedAlert, setSelectedAlert] = useState<any>(null);
-    const [activeTab, setActiveTab] = useState('dashboard');
+    const [activeTab, setActiveTab] = useState<TabName>('dashboard');
 
     // AI Explanation state
     const [aiExplanation, setAiExplanation] = useState<AlertExplanation | null>(null);
@@ -504,113 +505,7 @@ const DashboardScreen = () => {
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* Settings Page */}
-                    <View style={styles.settingsContainer}>
-                        <Text style={styles.pageTitle}>Settings</Text>
 
-                        {/* Account Section */}
-                        <View style={styles.settingsSection}>
-                            <Text style={styles.settingsSectionTitle}>Account</Text>
-
-                            <View style={styles.settingsCard}>
-                                <View style={styles.accountInfo}>
-                                    <View style={styles.avatarCircle}>
-                                        <Ionicons name="person" size={32} color="#10b981" />
-                                    </View>
-                                    <View style={styles.accountDetails}>
-                                        <Text style={styles.accountName}>{user?.email || 'User'}</Text>
-                                    </View>
-                                </View>
-                            </View>
-                        </View>
-
-                        {/* Preferences Section */}
-                        <View style={styles.settingsSection}>
-                            <Text style={styles.settingsSectionTitle}>Preferences</Text>
-
-                            <View style={styles.settingsCard}>
-                                <TouchableOpacity style={styles.settingsItem}>
-                                    <View style={styles.settingsItemLeft}>
-                                        <Ionicons name="notifications-outline" size={22} color="#e5e7eb" />
-                                        <Text style={styles.settingsItemText}>Notifications</Text>
-                                    </View>
-                                    <Ionicons name="chevron-forward" size={20} color="#6b7f72" />
-                                </TouchableOpacity>
-
-                                <View style={styles.settingsDivider} />
-
-                                <TouchableOpacity style={styles.settingsItem}>
-                                    <View style={styles.settingsItemLeft}>
-                                        <Ionicons name="moon-outline" size={22} color="#e5e7eb" />
-                                        <Text style={styles.settingsItemText}>Dark Mode</Text>
-                                    </View>
-                                    <View style={styles.settingsToggle}>
-                                        <Text style={styles.settingsToggleText}>On</Text>
-                                    </View>
-                                </TouchableOpacity>
-
-                                <View style={styles.settingsDivider} />
-
-                                <TouchableOpacity style={styles.settingsItem}>
-                                    <View style={styles.settingsItemLeft}>
-                                        <Ionicons name="language-outline" size={22} color="#e5e7eb" />
-                                        <Text style={styles.settingsItemText}>Language</Text>
-                                    </View>
-                                    <View style={styles.settingsItemRight}>
-                                        <Text style={styles.settingsValueText}>English</Text>
-                                        <Ionicons name="chevron-forward" size={20} color="#6b7f72" />
-                                    </View>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-
-                        {/* About Section */}
-                        <View style={styles.settingsSection}>
-                            <Text style={styles.settingsSectionTitle}>About</Text>
-
-                            <View style={styles.settingsCard}>
-                                <TouchableOpacity style={styles.settingsItem}>
-                                    <View style={styles.settingsItemLeft}>
-                                        <Ionicons name="help-circle-outline" size={22} color="#e5e7eb" />
-                                        <Text style={styles.settingsItemText}>Help & Support</Text>
-                                    </View>
-                                    <Ionicons name="chevron-forward" size={20} color="#6b7f72" />
-                                </TouchableOpacity>
-
-                                <View style={styles.settingsDivider} />
-
-                                <TouchableOpacity style={styles.settingsItem}>
-                                    <View style={styles.settingsItemLeft}>
-                                        <Ionicons name="document-text-outline" size={22} color="#e5e7eb" />
-                                        <Text style={styles.settingsItemText}>Privacy Policy</Text>
-                                    </View>
-                                    <Ionicons name="chevron-forward" size={20} color="#6b7f72" />
-                                </TouchableOpacity>
-
-                                <View style={styles.settingsDivider} />
-
-                                <View style={styles.settingsItem}>
-                                    <View style={styles.settingsItemLeft}>
-                                        <Ionicons name="information-circle-outline" size={22} color="#e5e7eb" />
-                                        <Text style={styles.settingsItemText}>Version</Text>
-                                    </View>
-                                    <Text style={styles.settingsValueText}>1.0.0</Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        {/* Sign Out Button */}
-                        <TouchableOpacity
-                            style={styles.signOutButtonLarge}
-                            onPress={signOut}
-                            activeOpacity={0.8}
-                        >
-                            <Ionicons name="log-out-outline" size={22} color="#FFFFFF" />
-                            <Text style={styles.signOutButtonText}>Sign Out</Text>
-                        </TouchableOpacity>
-
-                        <View style={styles.bottomPadding} />
-                    </View>
                 </ScrollView>
             ) : (
                 <View style={styles.centerContainer}>
@@ -620,63 +515,10 @@ const DashboardScreen = () => {
                 </View>
             )}
 
-            {/* Footer Navigation */}
-            <View style={styles.footer}>
-                <TouchableOpacity
-                    style={styles.footerTab}
-                    activeOpacity={0.7}
-                    onPress={() => setActiveTab('dashboard')}
-                >
-                    <View style={[styles.footerIconContainer, activeTab === 'dashboard' && styles.footerIconActive]}>
-                        <Ionicons name="grid" size={22} color={activeTab === 'dashboard' ? '#10b981' : '#6b7f72'} />
-                    </View>
-                    <Text style={[styles.footerLabel, activeTab === 'dashboard' && styles.footerLabelActive]}>Dashboard</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={styles.footerTab}
-                    activeOpacity={0.7}
-                    onPress={() => setActiveTab('incidents')}
-                >
-                    <View style={[styles.footerIconContainer, activeTab === 'incidents' && styles.footerIconActive]}>
-                        <Ionicons name="alert-circle" size={22} color={activeTab === 'incidents' ? '#10b981' : '#6b7f72'} />
-                    </View>
-                    <Text style={[styles.footerLabel, activeTab === 'incidents' && styles.footerLabelActive]}>Incidents</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={styles.footerTab}
-                    activeOpacity={0.7}
-                    onPress={() => navigation.navigate('OnCall' as never)}
-                >
-                    <View style={[styles.footerIconContainer, activeTab === 'oncall' && styles.footerIconActive]}>
-                        <Ionicons name="people" size={22} color={activeTab === 'oncall' ? '#10b981' : '#6b7f72'} />
-                    </View>
-                    <Text style={[styles.footerLabel, activeTab === 'oncall' && styles.footerLabelActive]}>On-Call</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={styles.footerTab}
-                    activeOpacity={0.7}
-                    onPress={() => setActiveTab('reports')}
-                >
-                    <View style={[styles.footerIconContainer, activeTab === 'reports' && styles.footerIconActive]}>
-                        <Ionicons name="stats-chart" size={22} color={activeTab === 'reports' ? '#10b981' : '#6b7f72'} />
-                    </View>
-                    <Text style={[styles.footerLabel, activeTab === 'reports' && styles.footerLabelActive]}>Reports</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={styles.footerTab}
-                    activeOpacity={0.7}
-                    onPress={() => setActiveTab('settings')}
-                >
-                    <View style={[styles.footerIconContainer, activeTab === 'settings' && styles.footerIconActive]}>
-                        <Ionicons name="settings" size={22} color={activeTab === 'settings' ? '#10b981' : '#6b7f72'} />
-                    </View>
-                    <Text style={[styles.footerLabel, activeTab === 'settings' && styles.footerLabelActive]}>Settings</Text>
-                </TouchableOpacity>
-            </View>
+            <FooterNavigation
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+            />
 
             {/* Alert Detail Modal */}
             <Modal
@@ -836,7 +678,7 @@ const DashboardScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0a0f0d',
+        backgroundColor: '#111813',
     },
     loadingContainer: {
         flex: 1,
