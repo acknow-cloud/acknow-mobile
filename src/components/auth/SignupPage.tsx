@@ -36,6 +36,7 @@ export const SignupPage = () => {
     const [confirmationCode, setConfirmationCode] = useState('');
     const [error, setError] = useState('');
     const [mode, setMode] = useState<'signup' | 'confirm'>('signup');
+    const [isSubmitting, setIsSubmitting] = useState(false); // NEW: Local loading state
     const { signUp, confirmSignUp, resendSignUpCode, isLoading } = useAuth();
     const navigation = useNavigation();
 
@@ -67,8 +68,12 @@ export const SignupPage = () => {
         console.log('📍 Current mode:', mode);
     }, [mode]);
 
+    // Replace the handleSignUp function with this heavily logged version
+
     const handleSignUp = async () => {
+        console.log('🟡 handleSignUp START');
         setError('');
+        setIsSubmitting(true); // Set local loading
 
         // Validation
         if (!formData.email || !formData.password || !formData.name || !formData.phone_number) {
@@ -130,7 +135,8 @@ export const SignupPage = () => {
         const tenantId = generateTenantId();
 
         try {
-            // Build user attributes
+            console.log('🟡 Starting signup try block');
+
             const userAttributes: Record<string, string> = {
                 email: formData.email.trim().toLowerCase(),
                 name: formData.name.trim(),
@@ -142,44 +148,35 @@ export const SignupPage = () => {
                 userAttributes.family_name = formData.family_name.trim();
             }
 
-            console.log('📤 Attempting signup with:', {
-                username: formData.email,
-                attributes: userAttributes,
-            });
+            console.log('📤 Attempting signup');
 
             const result = await signUp({
                 username: formData.email.trim().toLowerCase(),
                 password: formData.password,
-                options: {
-                    userAttributes: userAttributes,
-                },
+                options: { userAttributes },
             });
 
-            console.log('✅ Full Signup result:', JSON.stringify(result, null, 2));
+            console.log('✅ Signup result:', JSON.stringify(result, null, 2));
             console.log('📊 isSignUpComplete:', result.isSignUpComplete);
-            console.log('📊 userId:', result.userId);
 
-            // IMPORTANT: Check if confirmation is needed
-            // If isSignUpComplete is false, user needs to confirm email
             if (!result.isSignUpComplete) {
                 console.log('🔄 Email confirmation required - Moving to confirmation mode');
                 setMode('confirm');
+                console.log('✅ Mode set to confirm');
                 return;
             } else {
-                console.log('⚠️ WARNING: isSignUpComplete is TRUE!');
-                console.log('⚠️ This means either:');
-                console.log('   1. Auto-confirmation is enabled in Cognito');
-                console.log('   2. Email verification is not required');
-                console.log('   3. User was already confirmed');
-                console.log('🔄 Navigating to login...');
+                console.log('⚠️ WARNING: isSignUpComplete is TRUE - Auto-confirmed');
                 navigation.navigate('Login' as never);
             }
         } catch (err: any) {
             console.error('❌ Sign up error:', err);
-            console.error('Error details:', JSON.stringify(err, null, 2));
             setError(err.message || 'Failed to sign up');
+        } finally {
+            setIsSubmitting(false); // Clear local loading
+            console.log('🟡 handleSignUp END');
         }
     };
+
     const handleConfirmSignUp = async () => {
         setError('');
 
@@ -197,15 +194,12 @@ export const SignupPage = () => {
             });
 
             console.log('✅ Confirmation successful, navigating to login');
-
-            // Navigate to login after successful confirmation
             navigation.navigate('Login' as never);
         } catch (err: any) {
             console.error('Confirmation error:', err);
             setError(err.message || 'Confirmation failed');
         }
     };
-
     const handleResendCode = async () => {
         try {
             await resendSignUpCode({ username: formData.email });
@@ -269,7 +263,7 @@ export const SignupPage = () => {
                     <TouchableOpacity
                         style={styles.button}
                         onPress={handleConfirmSignUp}
-                        disabled={isLoading}
+                        disabled={isLoading} // This uses AuthContext isLoading (for confirmSignUp)
                     >
                         {isLoading ? (
                             <ActivityIndicator color="#FFFFFF" />
@@ -479,9 +473,9 @@ export const SignupPage = () => {
                 <TouchableOpacity
                     style={styles.button}
                     onPress={handleSignUp}
-                    disabled={isLoading}
+                    disabled={isSubmitting} // Use local loading state
                 >
-                    {isLoading ? (
+                    {isSubmitting ? (
                         <ActivityIndicator color="#FFFFFF" />
                     ) : (
                         <>
@@ -490,7 +484,6 @@ export const SignupPage = () => {
                         </>
                     )}
                 </TouchableOpacity>
-
                 <TouchableOpacity
                     onPress={() => navigation.navigate('Login' as never)}
                     style={styles.linkButton}

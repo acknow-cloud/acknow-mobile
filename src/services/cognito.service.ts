@@ -129,8 +129,38 @@ export const cognitoService = {
         }
     },
 
-    // Replace the signUpV6 function in your cognito.service.ts
 
+    confirmSignUp: async (username: string, code: string): Promise<any> => {
+        console.log('🟣 Direct API confirmSignUp called (old method)');
+
+        try {
+            const response = await fetch(COGNITO_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-amz-json-1.1',
+                    'X-Amz-Target': 'AWSCognitoIdentityProviderService.ConfirmSignUp',
+                },
+                body: JSON.stringify({
+                    ClientId: COGNITO_CONFIG.clientId,
+                    Username: username,
+                    ConfirmationCode: code,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Confirmation failed');
+            }
+
+            return data;
+        } catch (error: any) {
+            console.error('❌ ConfirmSignUp error:', error);
+            throw error;
+        }
+    },
+
+    // NEW: ConfirmSignUp method
     signUpV6: async (
         username: string,
         password: string,
@@ -207,73 +237,6 @@ export const cognitoService = {
             };
         } catch (error: any) {
             console.error('❌ SignUp error:', error);
-            throw error;
-        }
-    },
-
-    confirmSignUp: async (username: string, code: string): Promise<any> => {
-        console.log('🟣 Direct API confirmSignUp called (old method)');
-
-        try {
-            const response = await fetch(COGNITO_ENDPOINT, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-amz-json-1.1',
-                    'X-Amz-Target': 'AWSCognitoIdentityProviderService.ConfirmSignUp',
-                },
-                body: JSON.stringify({
-                    ClientId: COGNITO_CONFIG.clientId,
-                    Username: username,
-                    ConfirmationCode: code,
-                }),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || 'Confirmation failed');
-            }
-
-            return data;
-        } catch (error: any) {
-            console.error('❌ ConfirmSignUp error:', error);
-            throw error;
-        }
-    },
-
-    // NEW: ConfirmSignUp method
-    confirmSignUpV6: async (username: string, confirmationCode: string): Promise<void> => {
-        console.log('🟣 Direct API confirmSignUpV6 called');
-        console.log('Username:', username);
-        console.log('Code length:', confirmationCode.length);
-
-        try {
-            const response = await fetch(COGNITO_ENDPOINT, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-amz-json-1.1',
-                    'X-Amz-Target': 'AWSCognitoIdentityProviderService.ConfirmSignUp',
-                },
-                body: JSON.stringify({
-                    ClientId: COGNITO_CONFIG.clientId,
-                    Username: username,
-                    ConfirmationCode: confirmationCode,
-                }),
-            });
-
-            const data = await response.json();
-
-            console.log('📥 Response status:', response.status);
-
-            if (!response.ok) {
-                console.error('❌ Confirmation error:', data);
-                const errorMessage = data.message || data.__type || 'Confirmation failed';
-                throw new Error(errorMessage);
-            }
-
-            console.log('✅ Confirmation successful');
-        } catch (error: any) {
-            console.error('❌ Confirmation error:', error);
             throw error;
         }
     },

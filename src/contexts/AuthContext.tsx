@@ -1,10 +1,12 @@
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { cognitoService, UserData } from '../services/cognito.service';
+
 interface SignUpResult {
     isSignUpComplete: boolean;
     userId?: string;
-    codeDeliveryDetails?: any;  // Add this line
+    codeDeliveryDetails?: any;
 }
+
 interface SignUpParams {
     username: string;
     password: string;
@@ -28,12 +30,12 @@ interface ResendSignUpCodeParams {
     username: string;
 }
 
-
 interface AuthContextType {
     user: UserData | null;
     tenantId: string | null;
     isLoading: boolean;
     isAuthenticated: boolean;
+    initialAuthCheckComplete: boolean; // NEW: Track if initial check is done
     signIn: (username: string, password: string) => Promise<void>;
     signUp: (params: SignUpParams) => Promise<SignUpResult>;
     confirmSignUp: (params: ConfirmSignUpParams) => Promise<void>;
@@ -48,25 +50,31 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<UserData | null>(null);
     const [tenantId, setTenantId] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(false); // Changed to false initially
     const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [initialAuthCheckComplete, setInitialAuthCheckComplete] = useState(false); // NEW
 
     useEffect(() => {
         loadUser();
     }, []);
 
     const loadUser = async () => {
+        console.log('🟢 Starting initial auth check');
         try {
             const currentUser = await cognitoService.getCurrentUser();
             if (currentUser) {
+                console.log('✅ Found existing session');
                 setUser(currentUser);
                 setTenantId(currentUser.tenantId || null);
                 setIsAuthenticated(true);
+            } else {
+                console.log('ℹ️ No existing session');
             }
         } catch (error) {
             console.error('Error loading user:', error);
         } finally {
-            setIsLoading(false);
+            console.log('✅ Initial auth check complete');
+            setInitialAuthCheckComplete(true); // Mark initial check as complete
         }
     };
 
@@ -93,7 +101,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const signUp = async (params: SignUpParams): Promise<SignUpResult> => {
-        setIsLoading(true);
+        console.log('🟢 AuthContext.signUp called - NOT setting isLoading');
+        // DON'T set isLoading here - let the component handle its own loading state
         try {
             console.log('🟢 AuthContext.signUp called with params:', {
                 username: params.username,
@@ -101,7 +110,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 attributes: params.options?.userAttributes,
             });
 
-            // Call the cognito service with the new format
             const result = await cognitoService.signUpV6(
                 params.username,
                 params.password,
@@ -110,7 +118,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
             console.log('✅ SignUp result from service:', JSON.stringify(result, null, 2));
 
-            // Return the full result including codeDeliveryDetails
             return {
                 isSignUpComplete: result.isSignUpComplete,
                 userId: result.userId,
@@ -119,16 +126,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } catch (error) {
             console.error('❌ AuthContext signUp error:', error);
             throw error;
-        } finally {
-            setIsLoading(false);
         }
+        // Notice: NO finally block setting isLoading to false
     };
 
     const confirmSignUp = async (params: ConfirmSignUpParams) => {
         setIsLoading(true);
         try {
             console.log('🟢 AuthContext.confirmSignUp called');
-            await cognitoService.confirmSignUpV6(params.username, params.confirmationCode);
+            await cognitoService.confirmSignUp(params.username, params.confirmationCode);
             console.log('✅ Confirmation successful');
         } catch (error) {
             console.error('❌ AuthContext confirmSignUp error:', error);
@@ -176,6 +182,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 tenantId,
                 isLoading,
                 isAuthenticated,
+                initialAuthCheckComplete,
                 signIn,
                 signUp,
                 confirmSignUp,

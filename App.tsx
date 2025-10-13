@@ -16,15 +16,20 @@ console.log('✅ Polyfills loaded');
 const Stack = createNativeStackNavigator();
 
 const AppNavigator = () => {
-    const { isAuthenticated, isLoading } = useAuth();
+    const { isAuthenticated, initialAuthCheckComplete } = useAuth();
 
-    if (isLoading) {
+    // Show loading ONLY while checking for existing session on app startup
+    // After initial check completes, never show this loading screen again
+    if (!initialAuthCheckComplete) {
+        console.log('⏳ Waiting for initial auth check...');
         return (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0F1612' }}>
                 <ActivityIndicator size="large" color="#14B84B" />
             </View>
         );
     }
+
+    console.log('✅ Initial auth check complete, rendering navigation');
 
     return (
         <NavigationContainer>
