@@ -11,6 +11,7 @@ import DashboardScreen from './src/pages/DashboardPage';
 import OnCallPage from "./src/pages/OnCallPage";
 import SettingsScreen from "./src/pages/Settings";
 import IncidentsScreen from "./src/pages/Incidents";
+import AlertRulesScreen from "./src/pages/AlertRulesScreen";
 import { ActivityIndicator, View } from 'react-native';
 
 console.log('✅ Polyfills loaded');
@@ -42,6 +43,7 @@ const AppNavigator = () => {
                         <Stack.Screen name="OnCall" component={OnCallPage} />
                         <Stack.Screen name="Settings" component={SettingsScreen} />
                         <Stack.Screen name="Incidents" component={IncidentsScreen} />
+                        <Stack.Screen name="Rules" component={AlertRulesScreen} />
 
                     </>
                 ) : (

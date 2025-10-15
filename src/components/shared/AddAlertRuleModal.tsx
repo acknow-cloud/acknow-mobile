@@ -93,6 +93,7 @@ interface AddAlertRuleModalProps {
     onClose: () => void;
     onSave: (rule: AlertRule) => Promise<void>;
     integrations?: Integration[];
+    editingRule?: any; // The rule being edited, if any
 }
 
 export const AddAlertRuleModal: React.FC<AddAlertRuleModalProps> = ({
@@ -100,6 +101,7 @@ export const AddAlertRuleModal: React.FC<AddAlertRuleModalProps> = ({
                                                                         onClose,
                                                                         onSave,
                                                                         integrations = [],
+                                                                        editingRule = null,
                                                                     }) => {
     // Basic Info
     const [ruleName, setRuleName] = useState('');
@@ -340,7 +342,9 @@ export const AddAlertRuleModal: React.FC<AddAlertRuleModalProps> = ({
                 <View style={styles.modalContainer}>
                     {/* Header */}
                     <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Add Alert Rule</Text>
+                        <Text style={styles.modalTitle}>
+                            {editingRule ? 'Edit Alert Rule' : 'Add Alert Rule'}
+                        </Text>
                         <TouchableOpacity onPress={onClose} disabled={saving}>
                             <Ionicons name="close" size={24} color="#6b7f72" />
                         </TouchableOpacity>
@@ -882,7 +886,9 @@ export const AddAlertRuleModal: React.FC<AddAlertRuleModalProps> = ({
                             {saving ? (
                                 <ActivityIndicator color="#FFFFFF" size="small" />
                             ) : (
-                                <Text style={styles.saveButtonText}>Save Rule</Text>
+                                <Text style={styles.saveButtonText}>
+                                    {editingRule ? 'Update Rule' : 'Save Rule'}
+                                </Text>
                             )}
                         </TouchableOpacity>
                     </View>

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 
-export type TabName = 'dashboard' | 'incidents' | 'oncall' | 'reports' | 'settings';
+export type TabName = 'dashboard' | 'incidents' | 'rules'| 'oncall' | 'reports' | 'settings';
 
 interface FooterNavigationProps {
     activeTab: TabName;
@@ -27,6 +27,10 @@ const FooterNavigation: React.FC<FooterNavigationProps> = ({ activeTab, onTabCha
 
     const handleIncidents = () => {
         navigation.navigate('Incidents' as never);
+    };
+
+    const handleRules = () => {
+        navigation.navigate('Rules' as never);
     };
 
     return (
@@ -54,6 +58,19 @@ const FooterNavigation: React.FC<FooterNavigationProps> = ({ activeTab, onTabCha
                 </View>
                 <Text style={[styles.footerLabel, activeTab === 'incidents' && styles.footerLabelActive]}>
                     Incidents
+                </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+                style={styles.footerTab}
+                activeOpacity={0.7}
+                onPress={handleRules}
+            >
+                <View style={[styles.footerIconContainer, activeTab === 'rules' && styles.footerIconActive]}>
+                    <Ionicons name="git-branch" size={22} color={activeTab === 'rules' ? '#10b981' : '#6b7f72'} />
+                </View>
+                <Text style={[styles.footerLabel, activeTab === 'rules' && styles.footerLabelActive]}>
+                    Rules
                 </Text>
             </TouchableOpacity>
 
