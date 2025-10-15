@@ -25,6 +25,10 @@ const FooterNavigation: React.FC<FooterNavigationProps> = ({ activeTab, onTabCha
         navigation.navigate('Dashboard' as never);
     };
 
+    const handleIncidents = () => {
+        navigation.navigate('Incidents' as never);
+    };
+
     return (
         <View style={styles.footer}>
             <TouchableOpacity
@@ -43,7 +47,7 @@ const FooterNavigation: React.FC<FooterNavigationProps> = ({ activeTab, onTabCha
             <TouchableOpacity
                 style={styles.footerTab}
                 activeOpacity={0.7}
-                onPress={() => onTabChange('incidents')}
+                onPress={handleIncidents}
             >
                 <View style={[styles.footerIconContainer, activeTab === 'incidents' && styles.footerIconActive]}>
                     <Ionicons name="alert-circle" size={22} color={activeTab === 'incidents' ? '#10b981' : '#6b7f72'} />

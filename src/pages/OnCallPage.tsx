@@ -540,6 +540,7 @@ function AddEditModal({
             setNotes('');
             setError(null);
             setMode('single');
+            setSaving(false);
         }
     }, [visible, editing, defaultDate]);
 
@@ -576,6 +577,7 @@ function AddEditModal({
             await onSave(payload);
         } catch (e: any) {
             setError(e.message || 'Failed to save');
+        } finally {
             setSaving(false);
         }
     }

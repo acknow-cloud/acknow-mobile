@@ -10,6 +10,7 @@ import { SignupPage } from './src/components/auth/SignupPage';
 import DashboardScreen from './src/pages/DashboardPage';
 import OnCallPage from "./src/pages/OnCallPage";
 import SettingsScreen from "./src/pages/Settings";
+import IncidentsScreen from "./src/pages/Incidents";
 import { ActivityIndicator, View } from 'react-native';
 
 console.log('✅ Polyfills loaded');
@@ -40,6 +41,8 @@ const AppNavigator = () => {
                         <Stack.Screen name="Dashboard" component={DashboardScreen} />
                         <Stack.Screen name="OnCall" component={OnCallPage} />
                         <Stack.Screen name="Settings" component={SettingsScreen} />
+                        <Stack.Screen name="Incidents" component={IncidentsScreen} />
+
                     </>
                 ) : (
                     <>
