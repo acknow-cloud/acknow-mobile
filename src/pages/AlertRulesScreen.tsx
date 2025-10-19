@@ -12,65 +12,16 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AddAlertRuleModal } from '../components/shared/AddAlertRuleModal';
-import DashboardScreen from "./DashboardPage";
 import FooterNavigation, {TabName} from "../components/shared/Footer";
 import {useNavigation} from "@react-navigation/native";
+import {
+    alertRulesApi,
+    AlertRule,
+    Integration,
+    RuleType
+} from '../services/alert-rules.service';
+import {slackApi, teamsApi} from "../services/integrations.service";
 
-type RuleType = 'route' | 'mute' | 'override' | 'standard';
-
-interface AlertRule {
-    id: string;
-    rule_id: string;
-    tenant_id: string;
-    name: string;
-    description?: string;
-    status: 'active' | 'inactive';
-    priority: number;
-    rule_type: RuleType;
-    conditions: {
-        severity?: string[];
-        priority_level?: string[];
-        service?: string[];
-        message_contains?: string[];
-    };
-    actions: Array<{
-        integration_id: string;
-        integration_type: string;
-        enabled: boolean;
-    }>;
-    quiet_hours?: {
-        enabled: boolean;
-        schedules: Array<{
-            days: number[];
-            start_time: string;
-            end_time: string;
-        }>;
-    };
-    priority_override?: {
-        enabled: boolean;
-        new_priority: string;
-    };
-    mute_settings?: {
-        mute_until?: string;
-        mute_reason?: string;
-    };
-    digest_settings?: {
-        enabled: boolean;
-        frequency: string;
-    };
-    created_at: string;
-    updated_at: string;
-    trigger_count?: number;
-    last_triggered_at?: string;
-}
-
-interface Integration {
-    id: string;
-    name: string;
-    type: string;
-    channel_name?: string;
-    team_name?: string;
-}
 
 export default function AlertRulesScreen() {
     const [rules, setRules] = useState<AlertRule[]>([]);
@@ -86,7 +37,6 @@ export default function AlertRulesScreen() {
     const [expandedRuleId, setExpandedRuleId] = useState<string | null>(null);
     const navigation = useNavigation();
 
-    const tenantId = 'DReXZDKBprYV'; // TODO: Get from auth context
     const handleTabChange = (tab: TabName) => {
         setActiveTab(tab);
 
@@ -98,8 +48,11 @@ export default function AlertRulesScreen() {
             navigation.navigate('Reports' as never);
         } else if (tab === 'settings') {
             navigation.navigate('Settings' as never);
+        } else if (tab === 'incidents') {
+            navigation.navigate('Incidents' as never);
         }
     };
+
     useEffect(() => {
         loadData();
     }, []);
@@ -108,9 +61,9 @@ export default function AlertRulesScreen() {
         try {
             setLoading(true);
             await Promise.all([fetchRules(), fetchIntegrations()]);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error loading data:', error);
-            Alert.alert('Error', 'Failed to load alert rules');
+            Alert.alert('Error', error.message || 'Failed to load alert rules');
         } finally {
             setLoading(false);
         }
@@ -118,186 +71,49 @@ export default function AlertRulesScreen() {
 
     const fetchRules = async () => {
         try {
-            // TODO: Replace with actual API call
-            // const response = await fetch(`${API_BASE_URL}/tenants/${tenantId}/alert-rules`);
-            // const data = await response.json();
-
-            // Mock data
-            const mockRules: AlertRule[] = [
-                {
-                    id: `RULE#${tenantId}#rule1`,
-                    rule_id: 'rule1',
-                    tenant_id: tenantId,
-                    name: 'Critical P1 to Teams',
-                    description: 'Route all critical P1 alerts to Teams immediately',
-                    status: 'active',
-                    priority: 1,
-                    rule_type: 'route',
-                    conditions: {
-                        severity: ['critical'],
-                        priority_level: ['P1'],
-                    },
-                    actions: [
-                        {
-                            integration_id: 'TEAMS#DReXZDKBprYV#c3f71927',
-                            integration_type: 'teams',
-                            enabled: true,
-                        },
-                    ],
-                    created_at: '2025-10-15T20:00:00Z',
-                    updated_at: '2025-10-15T20:00:00Z',
-                    trigger_count: 42,
-                    last_triggered_at: '2025-10-15T21:30:00Z',
-                },
-                {
-                    id: `RULE#${tenantId}#rule2`,
-                    rule_id: 'rule2',
-                    tenant_id: tenantId,
-                    name: 'P2 Warnings with Quiet Hours',
-                    description: 'Queue P2 warnings during off-hours',
-                    status: 'active',
-                    priority: 2,
-                    rule_type: 'route',
-                    conditions: {
-                        severity: ['warning'],
-                        priority_level: ['P2'],
-                    },
-                    actions: [
-                        {
-                            integration_id: 'SLACK#DReXZDKBprYV#slack1',
-                            integration_type: 'slack',
-                            enabled: true,
-                        },
-                    ],
-                    quiet_hours: {
-                        enabled: true,
-                        schedules: [
-                            {
-                                days: [1, 2, 3, 4, 5],
-                                start_time: '22:00',
-                                end_time: '08:00',
-                            },
-                        ],
-                    },
-                    created_at: '2025-10-14T10:00:00Z',
-                    updated_at: '2025-10-15T15:00:00Z',
-                    trigger_count: 156,
-                },
-                {
-                    id: `RULE#${tenantId}#rule3`,
-                    rule_id: 'rule3',
-                    tenant_id: tenantId,
-                    name: 'Mute Maintenance Alerts',
-                    description: 'Suppress alerts from maintenance window',
-                    status: 'inactive',
-                    priority: 0,
-                    rule_type: 'mute',
-                    conditions: {
-                        service: ['api-gateway', 'database'],
-                    },
-                    actions: [],
-                    mute_settings: {
-                        mute_until: '2025-10-16T06:00:00Z',
-                        mute_reason: 'Scheduled database migration',
-                    },
-                    created_at: '2025-10-15T00:00:00Z',
-                    updated_at: '2025-10-15T00:00:00Z',
-                    trigger_count: 0,
-                },
-                {
-                    id: `RULE#${tenantId}#rule4`,
-                    rule_id: 'rule4',
-                    tenant_id: tenantId,
-                    name: 'P3 Daily Digest',
-                    description: 'Batch low-priority alerts into daily digest',
-                    status: 'active',
-                    priority: 3,
-                    rule_type: 'route',
-                    conditions: {
-                        priority_level: ['P3'],
-                    },
-                    actions: [
-                        {
-                            integration_id: 'EMAIL#DReXZDKBprYV#email1',
-                            integration_type: 'digest',
-                            enabled: true,
-                        },
-                    ],
-                    digest_settings: {
-                        enabled: true,
-                        frequency: 'daily',
-                    },
-                    created_at: '2025-10-10T09:00:00Z',
-                    updated_at: '2025-10-12T14:00:00Z',
-                    trigger_count: 89,
-                },
-                {
-                    id: `RULE#${tenantId}#rule5`,
-                    rule_id: 'rule5',
-                    tenant_id: tenantId,
-                    name: 'Downgrade Deployment Warnings',
-                    description: 'Override warnings to P3 during deployments',
-                    status: 'active',
-                    priority: 1,
-                    rule_type: 'override',
-                    conditions: {
-                        service: ['payment-service'],
-                        severity: ['warning'],
-                    },
-                    actions: [
-                        {
-                            integration_id: 'SLACK#DReXZDKBprYV#deployments',
-                            integration_type: 'slack',
-                            enabled: true,
-                        },
-                    ],
-                    priority_override: {
-                        enabled: true,
-                        new_priority: 'P3',
-                    },
-                    created_at: '2025-10-13T16:00:00Z',
-                    updated_at: '2025-10-13T16:00:00Z',
-                    trigger_count: 12,
-                },
-            ];
-
-            setRules(mockRules);
-        } catch (error) {
+            const response = await alertRulesApi.listRules();
+            console.log('Fetched rules:', response);
+            setRules(response.items || []);
+        } catch (error: any) {
             console.error('Error fetching rules:', error);
-            throw error;
+            Alert.alert('Error', error.message || 'Failed to fetch rules');
+            setRules([]);
         }
     };
 
     const fetchIntegrations = async () => {
         try {
-            // TODO: Replace with actual API call
-            const mockIntegrations: Integration[] = [
-                {
-                    id: 'TEAMS#DReXZDKBprYV#c3f71927',
-                    name: 'Acknow Teams',
-                    type: 'teams',
-                    channel_name: 'General',
-                    team_name: 'Acknow',
-                },
-                {
-                    id: 'SLACK#DReXZDKBprYV#slack1',
-                    name: 'Engineering Slack',
+            const [slackStatus, teamsStatus] = await Promise.all([
+                slackApi.getStatus(),
+                teamsApi.getStatus()
+            ]);
+
+            const mockIntegrations: Integration[] = [];
+
+            if (slackStatus.connected) {
+                mockIntegrations.push({
+                    id: slackStatus.id || 'slack_1',
+                    name: `Slack - ${slackStatus.teamName}`,
                     type: 'slack',
-                    channel_name: '#alerts',
-                },
-                {
-                    id: 'EMAIL#DReXZDKBprYV#email1',
-                    name: 'Team Email',
-                    type: 'email',
-                },
-            ];
+                    channel_name: slackStatus.teamName,
+                });
+            }
+
+            if (teamsStatus.connected) {
+                mockIntegrations.push({
+                    id: teamsStatus.id || 'teams_1',
+                    name: `Teams - ${teamsStatus.teamName}`,
+                    type: 'teams',
+                    channel_name: teamsStatus.channelName,
+                    team_name: teamsStatus.teamName,
+                });
+            }
 
             setIntegrations(mockIntegrations);
         } catch (error) {
             console.error('Error fetching integrations:', error);
         }
     };
-
     const onRefresh = async () => {
         setRefreshing(true);
         await loadData();
@@ -315,15 +131,11 @@ export default function AlertRulesScreen() {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            // TODO: API call to delete rule
-                            // await fetch(`${API_BASE_URL}/tenants/${tenantId}/alert-rules/${rule.rule_id}`, {
-                            //     method: 'DELETE',
-                            // });
-
+                            await alertRulesApi.deleteRule(rule.id);
                             setRules(prev => prev.filter(r => r.id !== rule.id));
                             Alert.alert('Success', 'Rule deleted successfully');
-                        } catch (error) {
-                            Alert.alert('Error', 'Failed to delete rule');
+                        } catch (error: any) {
+                            Alert.alert('Error', error.message || 'Failed to delete rule');
                         }
                     },
                 },
@@ -334,21 +146,17 @@ export default function AlertRulesScreen() {
     const handleToggleStatus = async (rule: AlertRule) => {
         try {
             const newStatus = rule.status === 'active' ? 'inactive' : 'active';
+            const response = await alertRulesApi.toggleRuleStatus(rule.id, newStatus);
 
-            // TODO: API call to update rule
-            // await fetch(`${API_BASE_URL}/tenants/${tenantId}/alert-rules/${rule.rule_id}`, {
-            //     method: 'PUT',
-            //     headers: { 'Content-Type': 'application/json' },
-            //     body: JSON.stringify({ status: newStatus }),
-            // });
-
-            setRules(prev =>
-                prev.map(r =>
-                    r.id === rule.id ? { ...r, status: newStatus } : r
-                )
-            );
-        } catch (error) {
-            Alert.alert('Error', 'Failed to update rule status');
+            if (response.rule) {
+                setRules(prev =>
+                    prev.map(r =>
+                        r.id === rule.id ? { ...r, ...response.rule } : r
+                    )
+                );
+            }
+        } catch (error: any) {
+            Alert.alert('Error', error.message || 'Failed to update rule status');
         }
     };
 
@@ -361,45 +169,43 @@ export default function AlertRulesScreen() {
         try {
             if (editingRule) {
                 // Update existing rule
-                // TODO: API call
-                console.log('Updating rule:', ruleData);
+                console.log('Updating rule:', editingRule.id, ruleData);
+                const response = await alertRulesApi.updateRule(editingRule.id, ruleData);
 
-                setRules(prev =>
-                    prev.map(r =>
-                        r.id === editingRule.id
-                            ? { ...r, ...ruleData, updated_at: new Date().toISOString() }
-                            : r
-                    )
-                );
-
-                Alert.alert('Success', 'Rule updated successfully');
+                // Add type guard to ensure rule exists
+                if (response.rule) {
+                    setRules(prev =>
+                        prev.map(r =>
+                            r.id === editingRule.id ? response.rule! : r
+                        )
+                    );
+                    Alert.alert('Success', 'Rule updated successfully');
+                } else {
+                    throw new Error('No rule returned from server');
+                }
             } else {
                 // Create new rule
-                // TODO: API call
                 console.log('Creating rule:', ruleData);
+                const response = await alertRulesApi.createRule(ruleData);
 
-                const newRule: AlertRule = {
-                    id: `RULE#${tenantId}#${Date.now()}`,
-                    rule_id: `${Date.now()}`,
-                    tenant_id: tenantId,
-                    ...ruleData,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                    trigger_count: 0,
-                };
-
-                setRules(prev => [...prev, newRule]);
-                Alert.alert('Success', 'Rule created successfully');
+                // Add type guard to ensure rule exists
+                if (response.rule) {
+                    setRules(prev => [...prev, response.rule!]);
+                    Alert.alert('Success', 'Rule created successfully');
+                } else {
+                    throw new Error('No rule returned from server');
+                }
             }
 
             setEditingRule(null);
-        } catch (error) {
+        } catch (error: any) {
+            console.error('Error saving rule:', error);
+            Alert.alert('Error', error.message || 'Failed to save rule');
             throw error;
         }
     };
 
     const filteredRules = rules.filter(rule => {
-        // Search filter
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
             if (
@@ -410,12 +216,10 @@ export default function AlertRulesScreen() {
             }
         }
 
-        // Status filter
         if (filterStatus !== 'all' && rule.status !== filterStatus) {
             return false;
         }
 
-        // Type filter
         if (filterType !== 'all' && rule.rule_type !== filterType) {
             return false;
         }
@@ -825,6 +629,7 @@ export default function AlertRulesScreen() {
                 }}
                 onSave={handleSaveRule}
                 editingRule={editingRule}
+                integrations={integrations}
             />
 
             <FooterNavigation
@@ -1141,4 +946,3 @@ const styles = StyleSheet.create({
         maxWidth: 300,
     },
 });
-

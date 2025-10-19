@@ -5,6 +5,7 @@ import { Buffer } from 'buffer';
 // Use the same API_BASE as your other backend calls
 const API_BASE = 'https://nal7m2qo8i.execute-api.eu-central-1.amazonaws.com/dev';
 
+
 export type OnCallEntry = {
     id: string;
     date: string;       // YYYY-MM-DD
@@ -13,6 +14,8 @@ export type OnCallEntry = {
     start: string;      // HH:mm
     end: string;        // HH:mm
     notes?: string;
+    range_from?: string; // ✅ ADD THIS
+    range_to?: string;   // ✅ ADD THIS
 };
 
 type BackendOnCallItem = {
@@ -164,6 +167,8 @@ export const oncallService = {
                             start: it.start,
                             end: it.end,
                             notes: it.notes,
+                            range_from: it.range_from, // ✅ PRESERVE RANGE INFO
+                            range_to: it.range_to,     // ✅ PRESERVE RANGE INFO
                         });
                     }
                 }
@@ -178,6 +183,7 @@ export const oncallService = {
                         start: it.start,
                         end: it.end,
                         notes: it.notes,
+                        // No range_from/range_to for single day entries
                     });
                 }
             }

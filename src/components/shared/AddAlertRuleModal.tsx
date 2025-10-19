@@ -12,19 +12,13 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
-type RuleType = 'route' | 'mute' | 'override' | 'standard';
-type Severity = 'critical' | 'warning' | 'info';
-type PriorityLevel = 'P1' | 'P2' | 'P3' | 'P4';
-type IntegrationType = 'slack' | 'teams' | 'email' | 'mobile_push' | 'digest';
-
-interface Integration {
-    id: string;
-    name: string;
-    type: IntegrationType;
-    channel_name?: string;
-    team_name?: string;
-}
+import {
+    RuleType,
+    Severity,
+    PriorityLevel,
+    IntegrationType,
+    Integration,
+} from '../../services/alert-rules.service';
 
 interface AlertRule {
     name: string;
@@ -109,7 +103,64 @@ export const AddAlertRuleModal: React.FC<AddAlertRuleModalProps> = ({
     const [ruleType, setRuleType] = useState<RuleType>('route');
     const [priority, setPriority] = useState('10');
     const [enabled, setEnabled] = useState(true);
+    // Add this near the top of AddAlertRuleModal component, after state declarations
+    useEffect(() => {
+        if (editingRule && visible) {
+            // Populate form with existing rule data
+            setRuleName(editingRule.name || '');
+            setDescription(editingRule.description || '');
+            setRuleType(editingRule.rule_type || 'route');
+            setPriority(String(editingRule.priority || 10));
+            setEnabled(editingRule.status === 'active');
 
+            // Conditions
+            setSelectedSeverities(editingRule.conditions?.severity || []);
+            setSelectedPriorities(editingRule.conditions?.priority_level || []);
+            setServices(editingRule.conditions?.service?.join(', ') || '');
+            setMessageContains(editingRule.conditions?.message_contains?.join(', ') || '');
+
+            // Actions
+            const integrationIds = editingRule.actions?.map((a: any) => a.integration_id) || [];
+            setSelectedIntegrations(integrationIds);
+            setNotificationLevel(editingRule.actions?.[0]?.route_to?.notification_level || 'normal');
+
+            // Quiet Hours
+            if (editingRule.quiet_hours?.enabled) {
+                setQuietHoursEnabled(true);
+                setTimezone(editingRule.quiet_hours.timezone || 'America/New_York');
+                setStartTime(editingRule.quiet_hours.schedules?.[0]?.start_time || '22:00');
+                setEndTime(editingRule.quiet_hours.schedules?.[0]?.end_time || '08:00');
+                setSelectedDays(editingRule.quiet_hours.schedules?.[0]?.days || [1, 2, 3, 4, 5]);
+                setQuietBehavior(editingRule.quiet_hours.behavior || 'queue');
+            }
+
+            // Priority Override
+            if (editingRule.priority_override?.enabled) {
+                setOverrideEnabled(true);
+                setNewPriority(editingRule.priority_override.new_priority || 'P3');
+                setOverrideReason(editingRule.priority_override.reason || '');
+            }
+
+            // Mute Settings
+            if (editingRule.mute_settings) {
+                setMuteUntil(editingRule.mute_settings.mute_until || '');
+                setMuteReason(editingRule.mute_settings.mute_reason || '');
+            }
+
+            // Digest Settings
+            if (editingRule.digest_settings?.enabled) {
+                setDigestEnabled(true);
+                setDigestFrequency(editingRule.digest_settings.frequency || 'daily');
+                setDigestTime(editingRule.digest_settings.time || '09:00');
+                setMaxAlerts(String(editingRule.digest_settings.max_alerts || 50));
+            }
+
+            setCooldown(String(editingRule.cooldown_minutes || 15));
+        } else if (!visible) {
+            // Reset form when modal closes
+            resetForm();
+        }
+    }, [editingRule, visible]);
     // Conditions
     const [selectedSeverities, setSelectedSeverities] = useState<Severity[]>([]);
     const [selectedPriorities, setSelectedPriorities] = useState<PriorityLevel[]>([]);

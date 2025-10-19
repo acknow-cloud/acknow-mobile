@@ -9,19 +9,16 @@ import {
     Modal,
     TextInput,
     ActivityIndicator,
-    Alert,
-    StatusBar,  // Add StatusBar, remove SafeAreaView
     Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { oncallService, OnCallEntry } from '../services/oncall.service';
 import FooterNavigation, { TabName } from '../components/shared/Footer';
+import { CustomAlert } from '../components/shared/CustomAlert';
+import { useCustomAlert } from '../hooks/useCustomAlerts';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CALENDAR_PADDING = 32; // 16px on each side
-const CALENDAR_WIDTH = SCREEN_WIDTH - CALENDAR_PADDING;
-const DAY_CELL_SIZE = (CALENDAR_WIDTH - 12) / 7; // 7 days, with small gaps
 
 // Date utilities
 const fmtISO = (d: Date): string =>
@@ -48,6 +45,10 @@ function addDays(d: Date, n: number): Date {
     const x = new Date(d);
     x.setDate(x.getDate() + n);
     return x;
+}
+
+function addWeeks(d: Date, n: number): Date {
+    return addDays(d, n * 7);
 }
 
 function addMonths(d: Date, n: number): Date {
@@ -94,13 +95,9 @@ function rangesOverlap(
 
 export default function OnCallPage() {
     const navigation = useNavigation();
-    const weekStart = startOfWeek(new Date());
-    const weekDays = useMemo<string[]>(
-        () => [...Array(7)].map((_, i) => fmtISO(addDays(weekStart, i))),
-        [weekStart]
-    );
-    const [activeTab, setActiveTab] = useState<TabName>('oncall');
+    const { alertConfig, showAlert, hideAlert } = useCustomAlert();
 
+    const [currentWeekStart, setCurrentWeekStart] = useState<Date>(startOfWeek(new Date()));
     const [baseMonth, setBaseMonth] = useState<Date>(startOfMonth(new Date()));
     const [entries, setEntries] = useState<OnCallEntry[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
@@ -108,10 +105,41 @@ export default function OnCallPage() {
     const [selectedDay, setSelectedDay] = useState<string | null>(null);
     const [modalVisible, setModalVisible] = useState<boolean>(false);
     const [editing, setEditing] = useState<OnCallEntry | null>(null);
+    const [activeTab, setActiveTab] = useState<TabName>('oncall');
+
+    // Calculate week days
+    const weekDays = useMemo<string[]>(
+        () => [...Array(7)].map((_, i) => fmtISO(addDays(currentWeekStart, i))),
+        [currentWeekStart]
+    );
+
+    const dateRange = useMemo(() => {
+        const monthStart = startOfMonth(baseMonth);
+        const monthEnd = endOfMonth(baseMonth);
+        const weekStart = currentWeekStart;
+        const weekEnd = addDays(currentWeekStart, 6);
+
+        let from = monthStart < weekStart ? monthStart : weekStart;
+        let to = monthEnd > weekEnd ? monthEnd : weekEnd;
+
+        if (selectedDay) {
+            const selectedDate = fromISO(selectedDay);
+            if (selectedDate < from) {
+                from = selectedDate;
+            }
+            if (selectedDate > to) {
+                to = selectedDate;
+            }
+        }
+
+        return {
+            from: fmtISO(from),
+            to: fmtISO(to)
+        };
+    }, [baseMonth, currentWeekStart, selectedDay]);
+
     const handleTabChange = (tab: TabName) => {
         setActiveTab(tab);
-
-        // Navigate to other screens
         if (tab === 'dashboard') {
             navigation.navigate('Dashboard' as never);
         } else if (tab === 'incidents') {
@@ -122,6 +150,7 @@ export default function OnCallPage() {
             navigation.navigate('Settings' as never);
         }
     };
+
     const entriesByDate = useMemo<Map<string, OnCallEntry[]>>(() => {
         const m = new Map<string, OnCallEntry[]>();
         for (const e of entries) {
@@ -139,29 +168,62 @@ export default function OnCallPage() {
         return m;
     }, [entries]);
 
-    async function loadOncall(monthAnchor: Date): Promise<void> {
-        const startA = startOfMonth(monthAnchor);
-        const endB = endOfMonth(monthAnchor);
-        const from = fmtISO(startA);
-        const to = fmtISO(endB);
+    useEffect(() => {
+        let cancelled = false;
 
+        async function loadData() {
+            setLoading(true);
+            setError(null);
+
+            try {
+                console.log('📅 Loading on-call data from', dateRange.from, 'to', dateRange.to);
+                const items = await oncallService.fetchOncall({
+                    from: dateRange.from,
+                    to: dateRange.to
+                });
+
+                if (!cancelled) {
+                    console.log('✅ Loaded', items.length, 'entries');
+                    setEntries(items);
+                }
+            } catch (e: any) {
+                console.error('❌ Error loading oncall:', e);
+                if (!cancelled) {
+                    setError(e.message || 'Failed to load on-call schedule');
+                    setEntries([]);
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoading(false);
+                }
+            }
+        }
+
+        void loadData();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [dateRange.from, dateRange.to]);
+
+    async function reloadData() {
         setLoading(true);
         setError(null);
         try {
-            const items = await oncallService.fetchOncall({ from, to });
+            console.log('🔄 Reloading on-call data');
+            const items = await oncallService.fetchOncall({
+                from: dateRange.from,
+                to: dateRange.to
+            });
             setEntries(items);
+            console.log('✅ Reloaded', items.length, 'entries');
         } catch (e: any) {
-            console.error('Error loading oncall:', e);
-            setError(e.message || 'Failed to load on-call schedule');
-            setEntries([]);
+            console.error('❌ Error reloading oncall:', e);
+            setError(e.message || 'Failed to reload on-call schedule');
         } finally {
             setLoading(false);
         }
     }
-
-    useEffect(() => {
-        void loadOncall(baseMonth);
-    }, [baseMonth]);
 
     function openAdd(dateISO: string): void {
         setEditing(null);
@@ -170,9 +232,43 @@ export default function OnCallPage() {
     }
 
     function openEdit(entry: OnCallEntry): void {
-        setEditing(entry);
-        setSelectedDay(entry.date);
-        setModalVisible(true);
+        const isRangeEntry = entry.range_from && entry.range_to && entry.range_from !== entry.range_to;
+
+        if (isRangeEntry && selectedDay) {
+            showAlert({
+                title: 'Edit Range Entry',
+                message: `This is part of a range from ${entry.range_from} to ${entry.range_to}.\n\nWhat would you like to do?`,
+                icon: 'create',
+                buttons: [
+                    {
+                        text: 'Cancel',
+                        style: 'cancel',
+                    },
+                    {
+                        text: 'Edit This Day Only',
+                        style: 'default',
+                        onPress: () => {
+                            setEditing({ ...entry, _editSingleDay: true } as any);
+                            setSelectedDay(entry.date);
+                            setModalVisible(true);
+                        },
+                    },
+                    {
+                        text: 'Edit Entire Range',
+                        style: 'default',
+                        onPress: () => {
+                            setEditing(entry);
+                            setSelectedDay(entry.date);
+                            setModalVisible(true);
+                        },
+                    },
+                ],
+            });
+        } else {
+            setEditing(entry);
+            setSelectedDay(entry.date);
+            setModalVisible(true);
+        }
     }
 
     async function handleSave(payload: any): Promise<void> {
@@ -197,70 +293,339 @@ export default function OnCallPage() {
                     await oncallService.createOncallSingle(single);
                 }
             } else {
-                const base: any = {
-                    person: payload.person,
-                    role: payload.role,
-                    start: payload.start,
-                    end: payload.end,
-                    notes: payload.notes,
-                };
-                const maybeRange = payload as any;
-                if (
-                    'from' in maybeRange &&
-                    'to' in maybeRange &&
-                    maybeRange.from &&
-                    maybeRange.to
-                ) {
-                    base.range_from = maybeRange.from;
-                    base.range_to = maybeRange.to;
+                const editingSingleDay = (editing as any)._editSingleDay;
+                const isRangeEntry = editing.range_from && editing.range_to && editing.range_from !== editing.range_to;
+
+                if (editingSingleDay && isRangeEntry && selectedDay) {
+                    console.log('✏️ Editing single day', selectedDay, 'from range', editing.range_from, 'to', editing.range_to);
+
+                    const fromDate = fromISO(editing.range_from!);
+                    const toDate = fromISO(editing.range_to!);
+                    const editDate = fromISO(selectedDay);
+
+                    const isFirstDay = editing.range_from === selectedDay;
+                    const isLastDay = editing.range_to === selectedDay;
+
+                    await oncallService.deleteOncallById(editing.id);
+
+                    await oncallService.createOncallSingle({
+                        date: selectedDay,
+                        person: payload.person,
+                        role: payload.role,
+                        start: payload.start,
+                        end: payload.end,
+                        notes: payload.notes,
+                    });
+
+                    if (isFirstDay) {
+                        const newFrom = fmtISO(addDays(fromDate, 1));
+                        if (newFrom <= editing.range_to!) {
+                            console.log('✅ Creating remaining range:', newFrom, 'to', editing.range_to);
+                            await oncallService.createOncallRange({
+                                from: newFrom,
+                                to: editing.range_to!,
+                                person: editing.person,
+                                role: editing.role,
+                                start: editing.start,
+                                end: editing.end,
+                                notes: editing.notes,
+                            });
+                        }
+                    } else if (isLastDay) {
+                        const newTo = fmtISO(addDays(toDate, -1));
+                        if (editing.range_from! <= newTo) {
+                            console.log('✅ Creating remaining range:', editing.range_from, 'to', newTo);
+                            await oncallService.createOncallRange({
+                                from: editing.range_from!,
+                                to: newTo,
+                                person: editing.person,
+                                role: editing.role,
+                                start: editing.start,
+                                end: editing.end,
+                                notes: editing.notes,
+                            });
+                        }
+                    } else {
+                        const dayBefore = fmtISO(addDays(editDate, -1));
+                        const dayAfter = fmtISO(addDays(editDate, 1));
+
+                        console.log('✅ Splitting range around edited day:');
+                        console.log('  - Range 1:', editing.range_from, 'to', dayBefore);
+                        console.log('  - Range 2:', dayAfter, 'to', editing.range_to);
+
+                        await oncallService.createOncallRange({
+                            from: editing.range_from!,
+                            to: dayBefore,
+                            person: editing.person,
+                            role: editing.role,
+                            start: editing.start,
+                            end: editing.end,
+                            notes: editing.notes,
+                        });
+
+                        await oncallService.createOncallRange({
+                            from: dayAfter,
+                            to: editing.range_to!,
+                            person: editing.person,
+                            role: editing.role,
+                            start: editing.start,
+                            end: editing.end,
+                            notes: editing.notes,
+                        });
+                    }
+                } else {
+                    const base: any = {
+                        person: payload.person,
+                        role: payload.role,
+                        start: payload.start,
+                        end: payload.end,
+                        notes: payload.notes,
+                    };
+
+                    const maybeRange = payload as any;
+                    if (
+                        'from' in maybeRange &&
+                        'to' in maybeRange &&
+                        maybeRange.from &&
+                        maybeRange.to
+                    ) {
+                        base.range_from = maybeRange.from;
+                        base.range_to = maybeRange.to;
+                    }
+
+                    console.log('✏️ Updating entry:', editing.id);
+                    await oncallService.updateOncallById(editing.id, base);
                 }
-                await oncallService.updateOncallById(editing.id, base);
             }
-            await loadOncall(baseMonth);
+
             setModalVisible(false);
+            await reloadData();
         } catch (e: any) {
-            Alert.alert('Error', e.message || 'Failed to save entry');
+            console.error('❌ Error saving:', e);
+            showAlert({
+                title: 'Error',
+                message: e.message || 'Failed to save entry',
+                icon: 'alert-circle',
+                buttons: [{ text: 'OK', style: 'default' }],
+            });
         }
     }
 
     async function handleDelete(entry: OnCallEntry): Promise<void> {
-        Alert.alert(
-            'Delete Entry',
-            'Are you sure you want to delete this on-call entry?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            await oncallService.deleteOncallById(entry.id);
-                            await loadOncall(baseMonth);
-                            setSelectedDay(null);
-                        } catch (e: any) {
-                            Alert.alert('Error', e.message || 'Failed to delete entry');
-                        }
+        const isRangeEntry = entry.range_from && entry.range_to && entry.range_from !== entry.range_to;
+
+        if (isRangeEntry && selectedDay) {
+            const fromDate = fromISO(entry.range_from!);
+            const toDate = fromISO(entry.range_to!);
+            const deleteDate = fromISO(selectedDay);
+
+            const isFirstDay = entry.range_from === selectedDay;
+            const isLastDay = entry.range_to === selectedDay;
+            const isOnlyDay = entry.range_from === entry.range_to;
+
+            if (isOnlyDay) {
+                showAlert({
+                    title: 'Delete Entry',
+                    message: `Delete ${entry.person}'s on-call shift on ${selectedDay}?`,
+                    icon: 'trash',
+                    buttons: [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                            text: 'Delete',
+                            style: 'destructive',
+                            onPress: async () => {
+                                try {
+                                    await oncallService.deleteOncallById(entry.id);
+                                    setSelectedDay(null);
+                                    await reloadData();
+                                } catch (e: any) {
+                                    showAlert({
+                                        title: 'Error',
+                                        message: e.message || 'Failed to delete entry',
+                                        icon: 'alert-circle',
+                                        buttons: [{ text: 'OK', style: 'default' }],
+                                    });
+                                }
+                            },
+                        },
+                    ],
+                });
+                return;
+            }
+
+            showAlert({
+                title: 'Delete From Range',
+                message: `This is part of a range from ${entry.range_from} to ${entry.range_to}.\n\nWhat would you like to do?`,
+                icon: 'trash',
+                buttons: [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Remove This Day Only',
+                        style: 'default',
+                        onPress: async () => {
+                            try {
+                                console.log('🗑️ Removing day', selectedDay, 'from range');
+
+                                await oncallService.deleteOncallById(entry.id);
+
+                                if (isFirstDay) {
+                                    const newFrom = fmtISO(addDays(fromDate, 1));
+                                    if (newFrom <= entry.range_to!) {
+                                        await oncallService.createOncallRange({
+                                            from: newFrom,
+                                            to: entry.range_to!,
+                                            person: entry.person,
+                                            role: entry.role,
+                                            start: entry.start,
+                                            end: entry.end,
+                                            notes: entry.notes,
+                                        });
+                                    }
+                                } else if (isLastDay) {
+                                    const newTo = fmtISO(addDays(toDate, -1));
+                                    if (entry.range_from! <= newTo) {
+                                        await oncallService.createOncallRange({
+                                            from: entry.range_from!,
+                                            to: newTo,
+                                            person: entry.person,
+                                            role: entry.role,
+                                            start: entry.start,
+                                            end: entry.end,
+                                            notes: entry.notes,
+                                        });
+                                    }
+                                } else {
+                                    const dayBefore = fmtISO(addDays(deleteDate, -1));
+                                    const dayAfter = fmtISO(addDays(deleteDate, 1));
+
+                                    await oncallService.createOncallRange({
+                                        from: entry.range_from!,
+                                        to: dayBefore,
+                                        person: entry.person,
+                                        role: entry.role,
+                                        start: entry.start,
+                                        end: entry.end,
+                                        notes: entry.notes,
+                                    });
+
+                                    await oncallService.createOncallRange({
+                                        from: dayAfter,
+                                        to: entry.range_to!,
+                                        person: entry.person,
+                                        role: entry.role,
+                                        start: entry.start,
+                                        end: entry.end,
+                                        notes: entry.notes,
+                                    });
+                                }
+
+                                setSelectedDay(null);
+                                await reloadData();
+
+                                showAlert({
+                                    title: 'Success',
+                                    message: `Removed ${entry.person} from ${selectedDay}`,
+                                    icon: 'information-circle',
+                                    buttons: [{ text: 'OK', style: 'default' }],
+                                });
+                            } catch (e: any) {
+                                console.error('❌ Error deleting day from range:', e);
+                                showAlert({
+                                    title: 'Error',
+                                    message: e.message || 'Failed to delete entry',
+                                    icon: 'alert-circle',
+                                    buttons: [{ text: 'OK', style: 'default' }],
+                                });
+                            }
+                        },
                     },
-                },
-            ]
-        );
+                    {
+                        text: 'Delete Entire Range',
+                        style: 'destructive',
+                        onPress: async () => {
+                            try {
+                                console.log('🗑️ Deleting entire range');
+                                await oncallService.deleteOncallById(entry.id);
+                                setSelectedDay(null);
+                                await reloadData();
+
+                                showAlert({
+                                    title: 'Success',
+                                    message: `Deleted entire range (${entry.range_from} to ${entry.range_to})`,
+                                    icon: 'information-circle',
+                                    buttons: [{ text: 'OK', style: 'default' }],
+                                });
+                            } catch (e: any) {
+                                console.error('❌ Error deleting range:', e);
+                                showAlert({
+                                    title: 'Error',
+                                    message: e.message || 'Failed to delete entry',
+                                    icon: 'alert-circle',
+                                    buttons: [{ text: 'OK', style: 'default' }],
+                                });
+                            }
+                        },
+                    },
+                ],
+            });
+        } else {
+            showAlert({
+                title: 'Delete Entry',
+                message: `Delete ${entry.person}'s on-call shift on ${entry.date}?`,
+                icon: 'trash',
+                buttons: [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Delete',
+                        style: 'destructive',
+                        onPress: async () => {
+                            try {
+                                console.log('🗑️ Deleting single day entry');
+                                await oncallService.deleteOncallById(entry.id);
+                                setSelectedDay(null);
+                                await reloadData();
+                            } catch (e: any) {
+                                console.error('❌ Error deleting entry:', e);
+                                showAlert({
+                                    title: 'Error',
+                                    message: e.message || 'Failed to delete entry',
+                                    icon: 'alert-circle',
+                                    buttons: [{ text: 'OK', style: 'default' }],
+                                });
+                            }
+                        },
+                    },
+                ],
+            });
+        }
     }
+
+    const weekRangeLabel = useMemo(() => {
+        const start = fromISO(weekDays[0]!);
+        const end = fromISO(weekDays[6]!);
+
+        if (start.getMonth() === end.getMonth()) {
+            return `${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} - ${end.getDate()}`;
+        }
+
+        return `${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+    }, [weekDays]);
 
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-            <Text style={styles.headerTitle}>On-Call Schedule</Text>
+                <Text style={styles.headerTitle}>On-Call Schedule</Text>
                 <TouchableOpacity onPress={() => openAdd(todayISO)} style={styles.addButton}>
                     <Ionicons name="add" size={20} color="#FFFFFF" />
                 </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-                {/* Month Navigation */}
                 <View style={styles.monthNav}>
                     <TouchableOpacity
                         onPress={() => setBaseMonth((prev) => startOfMonth(addMonths(prev, -1)))}
                         style={styles.navButton}
+                        disabled={loading}
                     >
                         <Ionicons name="chevron-back" size={24} color="#10b981" />
                     </TouchableOpacity>
@@ -273,6 +638,7 @@ export default function OnCallPage() {
                     <TouchableOpacity
                         onPress={() => setBaseMonth((prev) => startOfMonth(addMonths(prev, 1)))}
                         style={styles.navButton}
+                        disabled={loading}
                     >
                         <Ionicons name="chevron-forward" size={24} color="#10b981" />
                     </TouchableOpacity>
@@ -292,16 +658,15 @@ export default function OnCallPage() {
                     </View>
                 )}
 
-                {/* Calendar */}
                 <MonthView
                     monthDate={baseMonth}
-                    highlightISO={todayISO}
+                    todayISO={todayISO}
+                    selectedISO={selectedDay}
                     onDayClick={setSelectedDay}
                     entriesByDate={entriesByDate}
                     onAddClick={openAdd}
                 />
 
-                {/* Selected Day Info */}
                 {selectedDay && (
                     <View style={styles.selectedDayContainer}>
                         <View style={styles.selectedDayHeader}>
@@ -358,23 +723,60 @@ export default function OnCallPage() {
                     </View>
                 )}
 
-                {/* Weekly Schedule */}
                 <View style={styles.weeklySection}>
-                    <Text style={styles.sectionTitle}>This Week</Text>
+                    <View style={styles.weekHeader}>
+                        <TouchableOpacity
+                            onPress={() => setCurrentWeekStart(prev => addWeeks(prev, -1))}
+                            style={styles.weekNavButton}
+                            disabled={loading}
+                        >
+                            <Ionicons name="chevron-back" size={20} color="#10b981" />
+                        </TouchableOpacity>
+                        <View style={styles.weekTitleContainer}>
+                            <Text style={styles.sectionTitle}>Week Schedule</Text>
+                            <Text style={styles.weekRangeText}>{weekRangeLabel}</Text>
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => setCurrentWeekStart(prev => addWeeks(prev, 1))}
+                            style={styles.weekNavButton}
+                            disabled={loading}
+                        >
+                            <Ionicons name="chevron-forward" size={20} color="#10b981" />
+                        </TouchableOpacity>
+                    </View>
+
                     {weekDays.map((iso, i) => {
                         const list = entriesByDate.get(iso) ?? [];
                         const first = list[0];
                         const isToday = iso === todayISO;
+                        const isSelected = iso === selectedDay;
 
                         return (
                             <TouchableOpacity
                                 key={iso}
                                 onPress={() => setSelectedDay(iso)}
-                                style={[styles.weekRow, isToday && styles.weekRowToday]}
+                                style={[
+                                    styles.weekRow,
+                                    isToday && styles.weekRowToday,
+                                    isSelected && styles.weekRowSelected,
+                                ]}
                             >
                                 <View style={styles.weekDayColumn}>
-                                    <Text style={styles.weekDayName}>{dowShort(i)}</Text>
-                                    <Text style={styles.weekDayNumber}>{fromISO(iso).getDate()}</Text>
+                                    <Text style={[
+                                        styles.weekDayName,
+                                        (isToday || isSelected) && styles.weekDayNameActive
+                                    ]}>
+                                        {dowShort(i)}
+                                    </Text>
+                                    <Text style={[
+                                        styles.weekDayNumber,
+                                        (isToday || isSelected) && styles.weekDayNumberActive
+                                    ]}>
+                                        {fromISO(iso).getDate()}
+                                    </Text>
+                                    {isToday && (
+                                        <View style={styles.todayDot} />
+                                    )}
                                 </View>
                                 <View style={styles.weekInfoColumn}>
                                     <Text style={styles.weekPerson} numberOfLines={1}>
@@ -399,17 +801,14 @@ export default function OnCallPage() {
                     })}
                 </View>
 
-                {/* Bottom padding for footer */}
-                <View style={{ height: 80 }} />
+                <View style={{ height: 100 }} />
             </ScrollView>
 
-            {/* Footer Navigation */}
             <FooterNavigation
                 activeTab={activeTab}
                 onTabChange={handleTabChange}
             />
 
-            {/* Add/Edit Modal */}
             <AddEditModal
                 visible={modalVisible}
                 defaultDate={selectedDay ?? todayISO}
@@ -418,20 +817,32 @@ export default function OnCallPage() {
                 onSave={handleSave}
                 existingForDate={(iso) => entries.filter((e) => e.date === iso)}
             />
+
+            {alertConfig && (
+                <CustomAlert
+                    visible={!!alertConfig}
+                    title={alertConfig.title}
+                    message={alertConfig.message}
+                    buttons={alertConfig.buttons}
+                    icon={alertConfig.icon}
+                    onDismiss={hideAlert}
+                />
+            )}
         </View>
     );
 }
 
-// Month View Component
 function MonthView({
                        monthDate,
-                       highlightISO,
+                       todayISO,
+                       selectedISO,
                        onDayClick,
                        entriesByDate,
                        onAddClick,
                    }: {
     monthDate: Date;
-    highlightISO: string;
+    todayISO: string;
+    selectedISO: string | null;
     onDayClick: (iso: string) => void;
     entriesByDate: Map<string, OnCallEntry[]>;
     onAddClick: (iso: string) => void;
@@ -449,7 +860,7 @@ function MonthView({
         <View style={styles.monthContainer}>
             <View style={styles.monthGrid}>
                 {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-                    <View key={`${d}-${i}`} style={[styles.dowHeader, { width: DAY_CELL_SIZE }]}>
+                    <View key={`dow-${i}`} style={styles.dowHeader}>
                         <Text style={styles.dowText}>{d}</Text>
                     </View>
                 ))}
@@ -457,7 +868,8 @@ function MonthView({
                 {days.map((d) => {
                     const iso = fmtISO(d);
                     const inMonth = d.getMonth() === monthIndex;
-                    const isHighlighted = iso === highlightISO && inMonth;
+                    const isToday = iso === todayISO && inMonth;
+                    const isSelected = iso === selectedISO && inMonth;
                     const list = entriesByDate.get(iso) ?? [];
                     const primary = list[0];
 
@@ -468,15 +880,16 @@ function MonthView({
                             onLongPress={() => onAddClick(iso)}
                             style={[
                                 styles.dayCell,
-                                { width: DAY_CELL_SIZE, height: DAY_CELL_SIZE },
                                 !inMonth && styles.dayCellInactive,
-                                isHighlighted && styles.dayCellHighlighted,
+                                isToday && styles.dayCellToday,
+                                isSelected && styles.dayCellSelected,
                             ]}
                         >
                             <Text
                                 style={[
                                     styles.dayNumber,
                                     !inMonth && styles.dayNumberInactive,
+                                    (isToday || isSelected) && styles.dayNumberActive,
                                 ]}
                             >
                                 {d.getDate()}
@@ -499,7 +912,6 @@ function MonthView({
     );
 }
 
-// Add/Edit Modal Component
 function AddEditModal({
                           visible,
                           defaultDate,
@@ -527,9 +939,13 @@ function AddEditModal({
     const [error, setError] = useState<string | null>(null);
     const [saving, setSaving] = useState<boolean>(false);
 
+    const isEditingSingleDayFromRange = editing && (editing as any)._editSingleDay;
+    const isEditingEntireRange = editing && editing.range_from && editing.range_to &&
+        editing.range_from !== editing.range_to &&
+        !(editing as any)._editSingleDay;
+
     useEffect(() => {
         if (visible && !editing) {
-            // Reset form when opening for new entry
             setDate(defaultDate);
             setFrom(defaultDate);
             setTo(defaultDate);
@@ -541,8 +957,25 @@ function AddEditModal({
             setError(null);
             setMode('single');
             setSaving(false);
+        } else if (visible && editing) {
+            setDate(editing.date);
+            setFrom(editing.range_from || editing.date);
+            setTo(editing.range_to || editing.date);
+            setPerson(editing.person);
+            setRole(editing.role);
+            setStart(editing.start);
+            setEnd(editing.end);
+            setNotes(editing.notes || '');
+            setError(null);
+
+            if (isEditingEntireRange) {
+                setMode('range');
+            } else {
+                setMode('single');
+            }
+            setSaving(false);
         }
-    }, [visible, editing, defaultDate]);
+    }, [visible, editing, defaultDate, isEditingSingleDayFromRange, isEditingEntireRange]);
 
     const valid =
         person.trim().length > 0 &&
@@ -561,8 +994,7 @@ function AddEditModal({
                     ? { date, person, role, start, end, notes: notes || undefined }
                     : { from, to, person, role, start, end, notes: notes || undefined };
 
-            // Conflict check for single-day
-            if (mode === 'single') {
+            if (mode === 'single' && !isEditingSingleDayFromRange) {
                 const conflicts = existingForDate(date);
                 for (const c of conflicts) {
                     const overlaps = rangesOverlap(start, end, c.start, c.end);
@@ -586,18 +1018,28 @@ function AddEditModal({
         <Modal visible={visible} animationType="slide" transparent={true}>
             <View style={styles.modalOverlay}>
                 <View style={styles.modalContainer}>
-                    {/* Header */}
                     <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>
-                            {editing ? 'Edit Entry' : 'Add Entry'}
-                        </Text>
+                        <View>
+                            <Text style={styles.modalTitle}>
+                                {editing ? 'Edit Entry' : 'Add Entry'}
+                            </Text>
+                            {isEditingSingleDayFromRange && (
+                                <Text style={styles.modalSubtitle}>
+                                    Editing {date} only (was part of range)
+                                </Text>
+                            )}
+                            {isEditingEntireRange && (
+                                <Text style={styles.modalSubtitle}>
+                                    Editing entire range ({editing.range_from} to {editing.range_to})
+                                </Text>
+                            )}
+                        </View>
                         <TouchableOpacity onPress={onClose} disabled={saving}>
                             <Ionicons name="close" size={24} color="#6b7f72" />
                         </TouchableOpacity>
                     </View>
 
                     <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-                        {/* Mode Selection */}
                         {!editing && (
                             <View style={styles.formGroup}>
                                 <Text style={styles.label}>Mode</Text>
@@ -640,7 +1082,6 @@ function AddEditModal({
                             </View>
                         )}
 
-                        {/* Date/Range */}
                         {mode === 'single' ? (
                             <View style={styles.formGroup}>
                                 <Text style={styles.label}>Date</Text>
@@ -680,7 +1121,6 @@ function AddEditModal({
                             </View>
                         )}
 
-                        {/* Person */}
                         <View style={styles.formGroup}>
                             <Text style={styles.label}>Person</Text>
                             <TextInput
@@ -693,7 +1133,6 @@ function AddEditModal({
                             />
                         </View>
 
-                        {/* Role */}
                         <View style={styles.formGroup}>
                             <Text style={styles.label}>Role</Text>
                             <View style={styles.pickerContainer}>
@@ -720,7 +1159,6 @@ function AddEditModal({
                             </View>
                         </View>
 
-                        {/* Time Range */}
                         <View style={styles.formRow}>
                             <View style={styles.formGroupHalf}>
                                 <Text style={styles.label}>Start</Text>
@@ -746,7 +1184,6 @@ function AddEditModal({
                             </View>
                         </View>
 
-                        {/* Notes */}
                         <View style={styles.formGroup}>
                             <Text style={styles.label}>Notes (optional)</Text>
                             <TextInput
@@ -769,7 +1206,6 @@ function AddEditModal({
                         )}
                     </ScrollView>
 
-                    {/* Footer */}
                     <View style={styles.modalFooter}>
                         <TouchableOpacity
                             onPress={onClose}
@@ -809,17 +1245,16 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingVertical: 12,
-        paddingTop: 50,
-        marginTop:10,// Add this line - accounts for status bar
+        paddingTop: 60,
         borderBottomWidth: 1,
         borderBottomColor: '#2d3a32',
         backgroundColor: '#111813',
     },
     headerTitle: {
-        fontSize: 32,
+        fontSize: 28,
         fontWeight: '800',
         color: '#FFFFFF',
-        letterSpacing: -1,
+        letterSpacing: -0.5,
     },
     addButton: {
         width: 40,
@@ -895,8 +1330,10 @@ const styles = StyleSheet.create({
     monthGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
+        justifyContent: 'center',
     },
     dowHeader: {
+        width: `${100/7}%`,
         paddingVertical: 8,
         alignItems: 'center',
         justifyContent: 'center',
@@ -907,6 +1344,8 @@ const styles = StyleSheet.create({
         color: '#6b7f72',
     },
     dayCell: {
+        width: `${100/7}%`,
+        aspectRatio: 1,
         padding: 4,
         alignItems: 'center',
         justifyContent: 'center',
@@ -916,18 +1355,27 @@ const styles = StyleSheet.create({
     dayCellInactive: {
         opacity: 0.3,
     },
-    dayCellHighlighted: {
+    dayCellToday: {
         backgroundColor: '#10b98120',
         borderWidth: 2,
         borderColor: '#10b981',
     },
+    dayCellSelected: {
+        backgroundColor: '#3b82f620',
+        borderWidth: 2,
+        borderColor: '#3b82f6',
+    },
     dayNumber: {
-        fontSize: 12,
+        fontSize: 13,
         color: '#FFFFFF',
         fontWeight: '500',
     },
     dayNumberInactive: {
         color: '#6b7f72',
+    },
+    dayNumberActive: {
+        fontWeight: '700',
+        color: '#10b981',
     },
     dayBadge: {
         marginTop: 2,
@@ -955,7 +1403,7 @@ const styles = StyleSheet.create({
         padding: 12,
         backgroundColor: '#10b98115',
         borderRadius: 12,
-        borderWidth: 1,
+        borderWidth: 2,
         borderColor: '#10b98140',
     },
     selectedDayHeader: {
@@ -1033,11 +1481,34 @@ const styles = StyleSheet.create({
         marginHorizontal: 16,
         marginBottom: 16,
     },
+    weekHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 12,
+    },
+    weekNavButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 8,
+        backgroundColor: '#1c261f',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    weekTitleContainer: {
+        flex: 1,
+        alignItems: 'center',
+    },
     sectionTitle: {
         fontSize: 18,
         fontWeight: '700',
         color: '#FFFFFF',
-        marginBottom: 12,
+    },
+    weekRangeText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#6b7f72',
+        marginTop: 2,
     },
     weekRow: {
         flexDirection: 'row',
@@ -1051,22 +1522,44 @@ const styles = StyleSheet.create({
     },
     weekRowToday: {
         backgroundColor: '#10b98115',
-        borderColor: '#10b98140',
+        borderColor: '#10b98180',
+        borderWidth: 2,
+    },
+    weekRowSelected: {
+        backgroundColor: '#3b82f615',
+        borderColor: '#3b82f6',
+        borderWidth: 2,
     },
     weekDayColumn: {
         width: 50,
         alignItems: 'center',
+        position: 'relative',
     },
     weekDayName: {
         fontSize: 11,
         fontWeight: '600',
         color: '#6b7f72',
     },
+    weekDayNameActive: {
+        color: '#10b981',
+        fontWeight: '700',
+    },
     weekDayNumber: {
-        fontSize: 16,
+        fontSize: 18,
         fontWeight: '700',
         color: '#FFFFFF',
         marginTop: 2,
+    },
+    weekDayNumberActive: {
+        color: '#10b981',
+    },
+    todayDot: {
+        position: 'absolute',
+        bottom: -4,
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: '#10b981',
     },
     weekInfoColumn: {
         flex: 1,
@@ -1087,7 +1580,6 @@ const styles = StyleSheet.create({
         borderRadius: 6,
         backgroundColor: '#243126',
     },
-
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -1111,6 +1603,12 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: '700',
         color: '#FFFFFF',
+    },
+    modalSubtitle: {
+        fontSize: 13,
+        color: '#10b981',
+        marginTop: 4,
+        fontWeight: '600',
     },
     modalBody: {
         padding: 20,
