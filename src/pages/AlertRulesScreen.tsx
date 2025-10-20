@@ -643,7 +643,7 @@ export default function AlertRulesScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0f1612',
+        backgroundColor: '#111813',
     },
     loadingContainer: {
         flex: 1,
@@ -660,17 +660,18 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 20,
+        paddingHorizontal: 24,
+        paddingVertical: 12,
         paddingTop: 60,
         backgroundColor: '#0f1612',
         borderBottomWidth: 1,
         borderBottomColor: '#2d3a32',
     },
     headerTitle: {
-        fontSize: 28,
+        fontSize: 32,
         fontWeight: '800',
         color: '#FFFFFF',
-        letterSpacing: -0.5,
+        letterSpacing: -1,
     },
     headerSubtitle: {
         fontSize: 14,

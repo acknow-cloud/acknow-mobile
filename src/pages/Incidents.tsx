@@ -18,7 +18,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAlerts } from '../hooks/useAlerts';
 import { alertsService, AlertExplanation } from '../services/alerts.service';
 import FooterNavigation, { TabName } from '../components/shared/Footer';
-import { AddAlertRuleModal } from '../components/shared/AddAlertRuleModal';
 
 type FilterTab = 'all' | 'active' | 'acknowledged';
 
@@ -32,7 +31,6 @@ const IncidentsScreen = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedSeverity, setSelectedSeverity] = useState<string>('');
     const [selectedAlert, setSelectedAlert] = useState<any>(null);
-    const [showRuleModal, setShowRuleModal] = useState(false);
 
     // AI Explanation state
     const [aiExplanation, setAiExplanation] = useState<AlertExplanation | null>(null);
@@ -52,15 +50,6 @@ const IncidentsScreen = () => {
             navigation.navigate('Settings' as never);
         }
     };
-
-    const handleSaveRule = async (rule: any) => {
-        // TODO: Implement API call to save alert rule
-        console.log('Saving alert rule:', rule);
-        Alert.alert('Success', `Alert rule "${rule.name}" created successfully`);
-        // In production, you would call your API here:
-        // await alertsService.createAlertRule(rule);
-    };
-
     // Filter alerts by tab
     const filteredByTab = useMemo(() => {
         switch (filterTab) {
@@ -189,13 +178,7 @@ const IncidentsScreen = () => {
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Incidents</Text>
                 <View style={styles.headerActions}>
-                    <TouchableOpacity
-                        onPress={() => setShowRuleModal(true)}
-                        style={styles.addRuleButton}
-                    >
-                        <Ionicons name="add" size={18} color="#FFFFFF" />
-                        <Text style={styles.addRuleButtonText}>Rule</Text>
-                    </TouchableOpacity>
+
                     <TouchableOpacity
                         onPress={refresh}
                         style={styles.refreshButton}
@@ -486,12 +469,6 @@ const IncidentsScreen = () => {
                 </View>
             </Modal>
 
-            {/* Add Alert Rule Modal */}
-            <AddAlertRuleModal
-                visible={showRuleModal}
-                onClose={() => setShowRuleModal(false)}
-                onSave={handleSaveRule}
-            />
         </View>
     );
 };
@@ -499,7 +476,7 @@ const IncidentsScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0a0f0d',
+        backgroundColor: '#111813',
     },
     header: {
         flexDirection: 'row',
@@ -508,7 +485,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         paddingVertical: 12,
         paddingTop: 60,
-        backgroundColor: '#0a0f0d',
+        backgroundColor: '#0f1612',
         borderBottomWidth: 1,
         borderBottomColor: '#2d3a32',
     },
@@ -521,20 +498,6 @@ const styles = StyleSheet.create({
     headerActions: {
         flexDirection: 'row',
         gap: 8,
-    },
-    addRuleButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        borderRadius: 10,
-        backgroundColor: '#10b981',
-    },
-    addRuleButtonText: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#FFFFFF',
     },
     refreshButton: {
         width: 40,

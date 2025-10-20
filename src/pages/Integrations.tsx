@@ -52,7 +52,7 @@ export default function IntegrationsScreen() {
         } else if (tab === 'incidents') {
             navigation.navigate('Incidents' as never);
         } else if (tab === 'rules') {
-            navigation.navigate('AlertRules' as never);
+            navigation.navigate('Rules' as never);
         }
     };
 
@@ -325,7 +325,7 @@ export default function IntegrationsScreen() {
                                     onPress={handleSelectSlackChannel}
                                     style={[styles.actionButton, styles.actionButtonPrimary]}
                                 >
-                                    <Ionicons name="add-circle" size={18} color="#FFFFFF" />
+                                    <Ionicons name="add" size={18} color="#10b981"   />
                                     <Text style={styles.actionButtonTextPrimary}>Select Channel</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
@@ -339,7 +339,7 @@ export default function IntegrationsScreen() {
                                     onPress={handleSlackDisconnect}
                                     style={[styles.actionButton, styles.actionButtonDanger]}
                                 >
-                                    <Ionicons name="close-circle" size={18} color="#ef4444" />
+                                    <Ionicons name="close" size={18} color="#ef4444" />
                                     <Text style={styles.actionButtonTextDanger}>Disconnect</Text>
                                 </TouchableOpacity>
                             </View>
@@ -398,7 +398,7 @@ export default function IntegrationsScreen() {
                                     onPress={handleSelectTeamsChannel}
                                     style={[styles.actionButton, styles.actionButtonPrimary]}
                                 >
-                                    <Ionicons name="add-circle" size={18} color="#FFFFFF" />
+                                    <Ionicons name="add" size={18} color="#10b981"   />
                                     <Text style={styles.actionButtonTextPrimary}>Select Channel</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
@@ -412,7 +412,7 @@ export default function IntegrationsScreen() {
                                     onPress={handleTeamsDisconnect}
                                     style={[styles.actionButton, styles.actionButtonDanger]}
                                 >
-                                    <Ionicons name="close-circle" size={18} color="#ef4444" />
+                                    <Ionicons name="close" size={18} color="#ef4444" />
                                     <Text style={styles.actionButtonTextDanger}>Disconnect</Text>
                                 </TouchableOpacity>
                             </View>
@@ -515,7 +515,7 @@ export default function IntegrationsScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0f1612',
+        backgroundColor: '#111813',
     },
     loadingContainer: {
         flex: 1,
@@ -529,17 +529,21 @@ const styles = StyleSheet.create({
         color: '#6b7f72',
     },
     header: {
-        padding: 20,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 24,
+        paddingVertical: 12,
         paddingTop: 60,
         backgroundColor: '#0f1612',
         borderBottomWidth: 1,
         borderBottomColor: '#2d3a32',
     },
     headerTitle: {
-        fontSize: 28,
+        fontSize: 32,
         fontWeight: '800',
         color: '#FFFFFF',
-        letterSpacing: -0.5,
+        letterSpacing: -1,
     },
     headerSubtitle: {
         fontSize: 14,
@@ -637,8 +641,8 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     actionButtonPrimary: {
-        backgroundColor: '#10b981',
-        borderColor: '#10b981',
+        backgroundColor: '#0f1612',
+        borderColor: '#2d3a32',
     },
     actionButtonSecondary: {
         backgroundColor: '#0f1612',
@@ -651,7 +655,7 @@ const styles = StyleSheet.create({
     actionButtonTextPrimary: {
         fontSize: 13,
         fontWeight: '700',
-        color: '#FFFFFF',
+        color: '#10b981',
     },
     actionButtonTextSecondary: {
         fontSize: 13,
