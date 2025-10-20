@@ -25,15 +25,20 @@ const SettingsScreen = () => {
 
     const handleTabChange = (tab: TabName) => {
         setActiveTab(tab);
-
         if (tab === 'dashboard') {
             navigation.navigate('Dashboard' as never);
         } else if (tab === 'incidents') {
             navigation.navigate('Incidents' as never);
         } else if (tab === 'oncall') {
             navigation.navigate('OnCall' as never);
-        } else if (tab === 'reports') {
-            navigation.navigate('Reports' as never);
+        } else if (tab === 'settings') {
+            navigation.navigate('Settings' as never);
+        }
+        else if (tab === 'integrations') {
+            navigation.navigate('Integrations' as never);
+        }
+        else if (tab === 'rules') {
+            navigation.navigate('Rules' as never);
         }
     };
 

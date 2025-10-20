@@ -14,6 +14,8 @@ import IncidentsScreen from "./src/pages/Incidents";
 import AlertRulesScreen from "./src/pages/AlertRulesScreen";
 import { ActivityIndicator, View } from 'react-native';
 import IntegrationsScreen from "./src/pages/Integrations";
+import ReportsPage from "./src/pages/ReportsPage";
+
 console.log('✅ Polyfills loaded');
 
 const Stack = createNativeStackNavigator();
@@ -47,6 +49,11 @@ const AppNavigator = () => {
                         <Stack.Screen
                             name="Integrations"
                             component={IntegrationsScreen}
+                            options={{ headerShown: false }}
+                        />
+                        <Stack.Screen
+                            name="Reports"
+                            component={ReportsPage}
                             options={{ headerShown: false }}
                         />
 
